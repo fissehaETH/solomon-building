@@ -1,0 +1,8 @@
+{
+  "name": "Solomon Building Materials Shop",
+  "description": "Premium Android-optimized sales and inventory management for building materials professionals.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ]
+}
