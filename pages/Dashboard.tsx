@@ -25,7 +25,7 @@ import {
   ResponsiveContainer,
   Cell
 } from 'recharts';
-import { Product, Sale, Customer, User, Category } from '../types';
+import { Product, Sale, Customer, User, Category, Credit } from '../types';
 import { formatEthiopian, getEthiopianWeekday } from '../utils/dateUtils';
 import { api } from '../services/api';
 
@@ -33,11 +33,12 @@ interface DashboardProps {
   products: Product[];
   sales: Sale[];
   customers: Customer[];
+  credits: Credit[];
   categories: Category[];
   currentUser: User | null;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ products, sales, customers, categories, currentUser }) => {
+const Dashboard: React.FC<DashboardProps> = ({ products, sales, customers, credits, categories, currentUser }) => {
   const [showLowStockModal, setShowLowStockModal] = useState(false);
   const [showMigrateConfirm, setShowMigrateConfirm] = useState(false);
   const [isMigrating, setIsMigrating] = useState(false);
@@ -95,6 +96,7 @@ const Dashboard: React.FC<DashboardProps> = ({ products, sales, customers, categ
   }, 0);
 
   const totalProfit = totalSalesValue - totalCostValue;
+  const totalCreditValue = credits.reduce((acc, c) => acc + Number(c.remaining_amount), 0);
   
   const lowStockItems = products.filter(p => Number(p.stock_qty) <= Number(p.min_stock));
   const lowStockCount = lowStockItems.length;
@@ -171,6 +173,16 @@ const Dashboard: React.FC<DashboardProps> = ({ products, sales, customers, categ
           onClick={() => lowStockCount > 0 && setShowLowStockModal(true)}
           showChevron={lowStockCount > 0}
         />
+        {hasFinancialVisibility && (
+          <StatCard 
+            title="Credit (ብድር)" 
+            value={`${(totalCreditValue/1000).toFixed(1)}K`} 
+            unit="ETB"
+            icon={Receipt} 
+            color="text-red-600" 
+            bg="bg-red-50"
+          />
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -307,83 +319,6 @@ const Dashboard: React.FC<DashboardProps> = ({ products, sales, customers, categ
         </div>
       )}
 
-      {showMigrateConfirm && (
-        <div className="fixed inset-0 z-[110] bg-slate-900/80 backdrop-blur-xl flex items-center justify-center p-6 animate-in fade-in duration-300">
-          <div className="bg-white w-full max-w-md rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in duration-300">
-            <div className="p-10 text-center">
-              <div className="w-20 h-20 bg-orange-100 text-orange-600 rounded-3xl flex items-center justify-center mx-auto mb-8">
-                <Database className="w-10 h-10" />
-              </div>
-              <h3 className="text-2xl font-black text-slate-900 tracking-tight mb-4">እርግጠኛ ነዎት? (Are you sure?)</h3>
-              <p className="text-slate-500 font-bold leading-relaxed mb-10">
-                ሁሉንም መረጃዎች ከ Google Sheets ወደ Firebase ለማዛወር እርግጠኛ ነዎት? ይህ ሂደት መረጃዎችን ይጨምራል እንጂ አይሰርዝም።
-              </p>
-              <div className="grid grid-cols-2 gap-4">
-                <button 
-                  onClick={() => setShowMigrateConfirm(false)}
-                  className="py-5 bg-slate-100 text-slate-600 font-black uppercase tracking-widest rounded-2xl hover:bg-slate-200 transition-colors"
-                >
-                  ተመለስ
-                </button>
-                <button 
-                  onClick={executeMigration}
-                  className="py-5 bg-orange-500 text-white font-black uppercase tracking-widest rounded-2xl hover:bg-orange-600 shadow-lg shadow-orange-500/20 active:scale-95 transition-all"
-                >
-                  አዎ፣ አዛውር
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {currentUser?.role === 'Admin' && (
-        <div className="bg-slate-900 p-8 rounded-[2.5rem] text-white shadow-2xl shadow-slate-900/20 overflow-hidden relative group">
-          <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:opacity-20 transition-opacity">
-            <Database className="w-32 h-32 rotate-12" />
-          </div>
-          
-          <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
-            <div className="max-w-xl">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="bg-orange-500 p-2 rounded-xl">
-                  <Database className="w-5 h-5 text-white" />
-                </div>
-                <h3 className="text-xl font-black tracking-tight uppercase">የመረጃ ሽግግር (Migration Tool)</h3>
-              </div>
-              <p className="text-slate-400 font-bold text-sm leading-relaxed">
-                ሁሉንም መረጃዎች ከ Google Sheets ወደ አዲሱ Firebase Database ለማዛወር ይህንን ይጠቀሙ። 
-                ይህ ሂደት አንድ ጊዜ ብቻ የሚከናወን ሲሆን ሁሉንም ምርቶች፣ ሽያጮች እና ደንበኞች ያካትታል።
-              </p>
-              
-              {migrationResult && (
-                <div className={`mt-6 p-4 rounded-2xl flex items-center gap-3 animate-in zoom-in duration-300 ${migrationResult.success ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
-                  {migrationResult.success ? <CheckCircle2 className="w-5 h-5 shrink-0" /> : <AlertCircle className="w-5 h-5 shrink-0" />}
-                  <p className="text-xs font-black uppercase tracking-wider">{migrationResult.message}</p>
-                </div>
-              )}
-            </div>
-            
-            <button 
-              onClick={handleMigrateClick}
-              disabled={isMigrating}
-              className={`px-10 py-5 bg-orange-500 hover:bg-orange-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-orange-500/20 active:scale-95 transition-all flex items-center gap-3 whitespace-nowrap ${isMigrating ? 'opacity-50 cursor-not-allowed' : ''}`}
-            >
-              {isMigrating ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  በማዛወር ላይ...
-                </>
-              ) : (
-                <>
-                  <RefreshCcw className="w-5 h-5" />
-                  መረጃውን አዛውር
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

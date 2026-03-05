@@ -1,5 +1,5 @@
 
-import { Product, Sale, Customer, User, Category, Purchase } from '../types';
+import { Product, Sale, Customer, User, Category, Purchase, Credit, CreditPayment } from '../types';
 import pkg from '../package.json';
 import { db } from './firebase';
 import { 
@@ -11,7 +11,8 @@ import {
   query, 
   where, 
   updateDoc,
-  increment
+  increment,
+  deleteDoc
 } from 'firebase/firestore';
 
 const APP_VERSION = pkg.version;
@@ -104,6 +105,8 @@ class SolomonDB {
           sales: [],
           purchases: [],
           customers: [],
+          credits: [],
+          credit_payments: [],
           categories: [
             {
               catagory_id: 'CAT-001',
@@ -211,7 +214,7 @@ class SolomonDB {
     if (!db) return false;
 
     try {
-      const collections = ['products', 'sales', 'customers', 'users', 'categories', 'purchases'];
+      const collections = ['products', 'sales', 'customers', 'users', 'categories', 'purchases', 'credits', 'credit_payments'];
       const remoteData: any = {};
 
       for (const colName of collections) {
@@ -242,6 +245,8 @@ class SolomonDB {
       syncCollection('users');
       syncCollection('categories');
       syncCollection('purchases');
+      syncCollection('credits');
+      syncCollection('credit_payments');
 
       this.cache.lastSynced = new Date().toISOString();
       await this.persistCache();
@@ -257,6 +262,8 @@ class SolomonDB {
   getSales(): Sale[] { return this.cache?.sales || []; }
   getPurchases(): Purchase[] { return this.cache?.purchases || []; }
   getCustomers(): Customer[] { return this.cache?.customers || []; }
+  getCredits(): Credit[] { return this.cache?.credits || []; }
+  getCreditPayments(): CreditPayment[] { return this.cache?.credit_payments || []; }
 
   async addCategory(category: Omit<Category, 'catagory_id'>): Promise<void> {
     return this.enqueue(async () => {
@@ -276,6 +283,28 @@ class SolomonDB {
     });
   }
 
+  async deleteCategory(categoryId: string): Promise<void> {
+    return this.enqueue(async () => {
+      await this.ensureInitialized();
+      
+      // Check if any products are using this category
+      const category = this.cache.categories.find((c: any) => c.catagory_id === categoryId);
+      if (!category) return;
+
+      const productsUsingCategory = this.cache.products.filter((p: any) => p.category === category.catagoryName);
+      if (productsUsingCategory.length > 0) {
+        throw new Error(`Cannot delete category "${category.catagoryName}" because it is being used by ${productsUsingCategory.length} products.`);
+      }
+
+      this.cache.categories = (this.cache.categories || []).filter((c: any) => c.catagory_id !== categoryId);
+      await this.persistCache();
+
+      if (db) {
+        await deleteDoc(doc(db, 'categories', categoryId));
+      }
+    });
+  }
+
   async addProduct(product: Omit<Product, 'product_id' | 'created_at'>): Promise<void> {
     return this.enqueue(async () => {
       await this.ensureInitialized();
@@ -290,6 +319,27 @@ class SolomonDB {
       
       if (db) {
         await setDoc(doc(db, 'products', newProduct.product_id), newProduct);
+      }
+    });
+  }
+
+  async deleteProduct(productId: string): Promise<void> {
+    return this.enqueue(async () => {
+      await this.ensureInitialized();
+      
+      // Check if product has any sales or purchases
+      const hasSales = this.cache.sales.some((s: any) => s.product_id === productId);
+      const hasPurchases = this.cache.purchases.some((p: any) => p.product_id === productId);
+      
+      if (hasSales || hasPurchases) {
+        throw new Error("Cannot delete product with transaction history (sales or purchases).");
+      }
+
+      this.cache.products = this.cache.products.filter((p: any) => p.product_id !== productId);
+      await this.persistCache();
+
+      if (db) {
+        await deleteDoc(doc(db, 'products', productId));
       }
     });
   }
@@ -321,6 +371,50 @@ class SolomonDB {
       
       this.cache.sales.push(...newSales);
       
+      const isCredit = newSales[0]?.payment_method === 'Credit';
+      let creditRecord: Credit | null = null;
+
+      if (isCredit) {
+        const customerName = newSales[0]?.customer_name || 'Walk-in';
+        let customer = this.cache.customers.find((c: any) => c.customer_name === customerName);
+        
+        // If customer doesn't exist, create a temporary one or use a placeholder
+        let customerId = customer?.customer_id;
+        if (!customerId) {
+          customerId = this.generateId('C');
+          const newCustomer: Customer = {
+            customer_id: customerId,
+            customer_name: customerName,
+            phone: '',
+            address: '',
+            created_at: date
+          };
+          this.cache.customers.push(newCustomer);
+          if (db) await setDoc(doc(db, 'customers', customerId), newCustomer);
+        }
+
+        const totalAmount = newSales.reduce((sum, item) => sum + (Number(item.quantity) * Number(item.unitPrice)), 0);
+        
+        creditRecord = {
+          id: this.generateId('CR'),
+          credit_number: `CR-${receiptId.split('-')[1]}`,
+          customer_id: customerId,
+          sale_id: receiptId,
+          total_amount: totalAmount,
+          remaining_amount: totalAmount,
+          status: 'Pending',
+          credit_date: date,
+          due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // Default 30 days
+          note: `Credit sale for receipt ${receiptId}`,
+          created_by: newSales[0]?.recorded_by || 'Admin',
+          created_at: date,
+          updated_at: date
+        };
+
+        if (!this.cache.credits) this.cache.credits = [];
+        this.cache.credits.push(creditRecord);
+      }
+
       if (db) {
         const firestore = db;
         const batch = writeBatch(firestore);
@@ -335,6 +429,10 @@ class SolomonDB {
           }
           batch.set(doc(collection(firestore, 'sales')), item);
         });
+
+        if (creditRecord) {
+          batch.set(doc(firestore, 'credits', creditRecord.id), creditRecord);
+        }
         
         await batch.commit();
       } else {
@@ -535,7 +633,7 @@ class SolomonDB {
         }
 
         // 2. Prepare Firestore Batches
-        const collections = ['products', 'sales', 'customers', 'users', 'categories', 'purchases'];
+        const collections = ['products', 'sales', 'customers', 'users', 'categories', 'purchases', 'credits', 'credit_payments'];
         const firestore = db;
         let totalMigrated = 0;
 
@@ -565,6 +663,8 @@ class SolomonDB {
                 }
                 else if (colName === 'sales') id = normalized.sale_id;
                 else if (colName === 'purchases') id = normalized.purchase_id;
+                else if (colName === 'credits') id = normalized.id;
+                else if (colName === 'credit_payments') id = normalized.id;
                 
                 // Ensure ID is a string and not empty
                 if (id !== undefined && id !== null && id !== '') {
@@ -613,6 +713,181 @@ class SolomonDB {
     if (userId === 'SEED-001') return true;
     if (!this.cache?.users) return false;
     return this.cache.users.some((u: any) => u.user_id === userId);
+  }
+
+  async addUser(user: Omit<User, 'user_id' | 'created_at'>): Promise<void> {
+    return this.enqueue(async () => {
+      await this.ensureInitialized();
+      const hashedPassword = await this.hashString(user.password);
+      const newUser: User = { 
+        ...user, 
+        password: hashedPassword,
+        user_id: this.generateId('U'), 
+        created_at: new Date().toISOString() 
+      };
+      
+      if (!this.cache.users) this.cache.users = [];
+      this.cache.users.push(newUser);
+      await this.persistCache();
+      
+      if (db) {
+        await setDoc(doc(db, 'users', newUser.user_id), newUser);
+      }
+    });
+  }
+
+  async deleteUser(userId: string): Promise<void> {
+    return this.enqueue(async () => {
+      await this.ensureInitialized();
+      if (userId === 'SEED-001') {
+        throw new Error("Cannot delete the default admin user.");
+      }
+
+      this.cache.users = (this.cache.users || []).filter((u: any) => u.user_id !== userId);
+      await this.persistCache();
+
+      if (db) {
+        await deleteDoc(doc(db, 'users', userId));
+      }
+    });
+  }
+
+  async addCredit(credit: Omit<Credit, 'id' | 'created_at' | 'updated_at'>): Promise<void> {
+    return this.enqueue(async () => {
+      await this.ensureInitialized();
+      const now = new Date().toISOString();
+      const newCredit: Credit = { 
+        ...credit, 
+        id: this.generateId('CR'), 
+        created_at: now,
+        updated_at: now
+      };
+      
+      if (!this.cache.credits) this.cache.credits = [];
+      this.cache.credits.push(newCredit);
+      await this.persistCache();
+      
+      if (db) {
+        await setDoc(doc(db, 'credits', newCredit.id), newCredit);
+      }
+    });
+  }
+
+  async addCreditPayment(payment: Omit<CreditPayment, 'id' | 'created_at'>): Promise<void> {
+    return this.enqueue(async () => {
+      await this.ensureInitialized();
+      const now = new Date().toISOString();
+      const newPayment: CreditPayment = { 
+        ...payment, 
+        id: this.generateId('CP'), 
+        created_at: now
+      };
+      
+      if (!this.cache.credit_payments) this.cache.credit_payments = [];
+      this.cache.credit_payments.push(newPayment);
+
+      // Update the credit remaining amount
+      const credit = this.cache.credits.find((c: any) => c.id === payment.credit_id);
+      if (credit) {
+        credit.remaining_amount = Number(credit.remaining_amount) - Number(payment.amount);
+        if (credit.remaining_amount <= 0) {
+          credit.remaining_amount = 0;
+          credit.status = 'Paid';
+        }
+        credit.updated_at = now;
+      }
+
+      await this.persistCache();
+      
+      if (db) {
+        const batch = writeBatch(db);
+        batch.set(doc(collection(db, 'credit_payments')), newPayment);
+        if (credit) {
+          batch.update(doc(db, 'credits', credit.id), {
+            remaining_amount: credit.remaining_amount,
+            status: credit.status,
+            updated_at: now
+          });
+        }
+        await batch.commit();
+      }
+    });
+  }
+
+  async addBulkCreditPayment(data: {
+    customer_id: string;
+    amount: number;
+    payment_method: 'Cash' | 'Bank Transfer';
+    note: string;
+    received_by: string;
+  }): Promise<void> {
+    return this.enqueue(async () => {
+      await this.ensureInitialized();
+      const now = new Date().toISOString();
+      let remainingPayment = Number(data.amount);
+
+      // Get all pending/overdue credits for this customer, sorted by date (oldest first)
+      const customerCredits = this.cache.credits
+        .filter((c: any) => c.customer_id === data.customer_id && c.status !== 'Paid')
+        .sort((a: any, b: any) => new Date(a.credit_date).getTime() - new Date(b.credit_date).getTime());
+
+      if (customerCredits.length === 0) return;
+
+      const newPayments: CreditPayment[] = [];
+      const updatedCredits: Credit[] = [];
+
+      for (const credit of customerCredits) {
+        if (remainingPayment <= 0) break;
+
+        const paymentForThisCredit = Math.min(remainingPayment, Number(credit.remaining_amount));
+        
+        const newPayment: CreditPayment = {
+          id: this.generateId('CP'),
+          credit_id: credit.id,
+          amount: paymentForThisCredit,
+          payment_method: data.payment_method,
+          payment_date: now,
+          note: data.note || `Bulk payment for customer`,
+          received_by: data.received_by,
+          created_at: now
+        };
+
+        newPayments.push(newPayment);
+        
+        credit.remaining_amount = Number(credit.remaining_amount) - paymentForThisCredit;
+        if (credit.remaining_amount <= 0) {
+          credit.remaining_amount = 0;
+          credit.status = 'Paid';
+        }
+        credit.updated_at = now;
+        updatedCredits.push(credit);
+
+        remainingPayment -= paymentForThisCredit;
+      }
+
+      if (newPayments.length === 0) return;
+
+      if (!this.cache.credit_payments) this.cache.credit_payments = [];
+      this.cache.credit_payments.push(...newPayments);
+
+      await this.persistCache();
+
+      if (db) {
+        const firestore = db;
+        const batch = writeBatch(firestore);
+        newPayments.forEach(p => {
+          batch.set(doc(collection(firestore, 'credit_payments')), p);
+        });
+        updatedCredits.forEach(c => {
+          batch.update(doc(firestore, 'credits', c.id), {
+            remaining_amount: c.remaining_amount,
+            status: c.status,
+            updated_at: now
+          });
+        });
+        await batch.commit();
+      }
+    });
   }
 }
 

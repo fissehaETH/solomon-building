@@ -12,16 +12,20 @@ import {
   ChevronRight, 
   ChevronDown,
   ArrowLeft,
-  AlertTriangle
+  AlertTriangle,
+  UserPlus,
+  User as UserIcon
 } from 'lucide-react';
-import { Product, Sale, Category } from '../types';
+import { Product, Sale, Category, Customer } from '../types';
 import { formatEthiopian } from '../utils/dateUtils';
 
 interface SalesProps {
   products: Product[];
   sales: Sale[];
   categories: Category[];
+  customers: Customer[];
   onAddSales: (salesItems: Omit<Sale, 'sale_id' | 'date'>[]) => Promise<void>;
+  onAddCustomer: (customer: Omit<Customer, 'customer_id' | 'created_at'>) => Promise<void>;
 }
 
 interface CartItem {
@@ -48,10 +52,16 @@ const SearchableProductDropdown = ({ products, selectedId, onSelect }: { product
   }, []);
 
   const selectedProduct = products.find(p => p.product_id === selectedId);
-  const filtered = products.filter(p => 
-    p.product_name.toLowerCase().includes(search.toLowerCase()) ||
-    p.brand.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = products.filter(p => {
+    try {
+      const name = String(p?.product_name || '').toLowerCase();
+      const brand = String(p?.brand || '').toLowerCase();
+      const s = String(search || '').toLowerCase();
+      return name.includes(s) || brand.includes(s);
+    } catch (e) {
+      return false;
+    }
+  });
 
   return (
     <div className="space-y-2 relative" ref={containerRef}>
@@ -100,9 +110,88 @@ const SearchableProductDropdown = ({ products, selectedId, onSelect }: { product
   );
 };
 
-const Sales: React.FC<SalesProps> = ({ products, sales, categories, onAddSales }) => {
+const SearchableCustomerDropdown = ({ customers, selectedName, onSelect, onAddNew }: { customers: Customer[], selectedName: string, onSelect: (name: string) => void, onAddNew: () => void }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setIsOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filtered = (customers || []).filter(c => {
+    try {
+      const name = String(c?.customer_name || '').toLowerCase();
+      const phone = String(c?.phone || '').toLowerCase();
+      const s = String(search || '').toLowerCase();
+      return name.includes(s) || phone.includes(s);
+    } catch (e) {
+      return false;
+    }
+  });
+
+  return (
+    <div className="space-y-2 relative" ref={containerRef}>
+      <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">ደንበኛ ይምረጡ (Select Customer)</label>
+      <div className="flex gap-2">
+        <button type="button" onClick={() => setIsOpen(!isOpen)} className={`flex-1 flex items-center justify-between px-5 py-5 border rounded-2xl transition-all ${isOpen ? 'border-orange-500 bg-white ring-4 ring-orange-500/10' : 'border-slate-200 bg-slate-50'}`}>
+          <span className="flex items-center gap-3 truncate">
+            <UserIcon className="w-6 h-6 text-slate-400" />
+            {selectedName ? <span className="font-bold text-slate-800 text-lg">{selectedName}</span> : <span className="text-slate-400">ደንበኛ ይምረጡ...</span>}
+          </span>
+          <ChevronDown className="w-6 h-6 text-slate-400" />
+        </button>
+        <button 
+          type="button"
+          onClick={onAddNew}
+          className="w-16 h-16 bg-slate-900 text-white rounded-2xl flex items-center justify-center hover:bg-black transition-all active:scale-95"
+          title="Add New Customer"
+        >
+          <UserPlus className="w-6 h-6" />
+        </button>
+      </div>
+      {isOpen && (
+        <div className="absolute z-[80] left-0 right-0 mt-2 bg-white border border-slate-200 rounded-3xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2">
+          <div className="p-4 bg-slate-50 border-b border-slate-100">
+            <input autoFocus type="text" placeholder="ደንበኛ ይፈልጉ..." className="w-full px-5 py-4 bg-white border border-slate-200 rounded-2xl outline-none" value={search} onChange={(e) => setSearch(e.target.value)} />
+          </div>
+          <div className="max-h-60 overflow-y-auto">
+            {filtered.map(c => (
+              <button 
+                key={c.customer_id} 
+                onClick={() => { onSelect(c.customer_name); setIsOpen(false); }} 
+                className="w-full flex items-center justify-between px-6 py-5 hover:bg-orange-50 border-b border-slate-50 last:border-0"
+              >
+                <div className="text-left">
+                  <p className="font-bold text-base text-slate-800">{c.customer_name}</p>
+                  <p className="text-[11px] text-slate-400 font-bold uppercase">{c.phone}</p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-300" />
+              </button>
+            ))}
+            {filtered.length === 0 && (
+              <div className="p-8 text-center">
+                <p className="text-sm font-bold text-slate-400">ምንም ደንበኛ አልተገኘም</p>
+                <button onClick={onAddNew} className="mt-4 text-orange-600 font-black uppercase text-[10px] tracking-widest">አዲስ መመዝገብ</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const Sales: React.FC<SalesProps> = ({ products, sales, categories, customers, onAddSales, onAddCustomer }) => {
   const [showPOS, setShowPOS] = useState(false);
   const [showCartMobile, setShowCartMobile] = useState(false);
+  const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
+  const [newCustomerData, setNewCustomerData] = useState({ customer_name: '', phone: '', address: '' });
+  const [isAddingCustomer, setIsAddingCustomer] = useState(false);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -233,6 +322,21 @@ const Sales: React.FC<SalesProps> = ({ products, sales, categories, onAddSales }
       console.error(err);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleAddCustomer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsAddingCustomer(true);
+    try {
+      await onAddCustomer(newCustomerData);
+      setTransactionInfo(prev => ({ ...prev, customer_name: newCustomerData.customer_name }));
+      setShowAddCustomerModal(false);
+      setNewCustomerData({ customer_name: '', phone: '', address: '' });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsAddingCustomer(false);
     }
   };
 
@@ -395,14 +499,72 @@ const Sales: React.FC<SalesProps> = ({ products, sales, categories, onAddSales }
                     ))}
                   </div>
                   <div className="mt-12 space-y-6">
+                     <div className="space-y-4">
+                        <label className="text-[11px] font-black text-slate-400 uppercase ml-1 tracking-widest">የክፍያ ዘዴ (Payment Method)</label>
+                        <div className="grid grid-cols-3 gap-3">
+                          {(['Cash', 'Bank Transfer', 'Credit'] as const).map((method) => (
+                            <button
+                              key={method}
+                              type="button"
+                              onClick={() => setTransactionInfo({...transactionInfo, payment_method: method})}
+                              className={`py-4 rounded-2xl border-2 font-black text-[10px] uppercase tracking-widest transition-all ${transactionInfo.payment_method === method ? 'border-orange-500 bg-orange-50 text-orange-600' : 'border-slate-100 text-slate-400 hover:border-slate-200'}`}
+                            >
+                              {method}
+                            </button>
+                          ))}
+                        </div>
+                     </div>
+
                      <div className="space-y-2">
-                        <label className="text-[11px] font-black text-slate-400 uppercase ml-1">የደንበኛ ስም (Customer)</label>
-                        <input className="w-full px-6 py-5 bg-slate-50 border border-slate-200 rounded-[1.5rem] outline-none font-bold" value={transactionInfo.customer_name} onChange={(e) => setTransactionInfo({...transactionInfo, customer_name: e.target.value})} placeholder="በመደበኛ ደንበኛ" />
+                        {transactionInfo.payment_method === 'Credit' ? (
+                          <SearchableCustomerDropdown 
+                            customers={customers} 
+                            selectedName={transactionInfo.customer_name} 
+                            onSelect={(name) => setTransactionInfo({ ...transactionInfo, customer_name: name })}
+                            onAddNew={() => setShowAddCustomerModal(true)}
+                          />
+                        ) : (
+                          <>
+                            <label className="text-[11px] font-black text-slate-400 uppercase ml-1">የደንበኛ ስም (Customer)</label>
+                            <input className="w-full px-6 py-5 bg-slate-50 border border-slate-200 rounded-[1.5rem] outline-none font-bold" value={transactionInfo.customer_name} onChange={(e) => setTransactionInfo({...transactionInfo, customer_name: e.target.value})} placeholder="በመደበኛ ደንበኛ" />
+                          </>
+                        )}
                      </div>
                   </div>
                </div>
              )}
           </div>
+
+          {showAddCustomerModal && (
+            <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+              <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowAddCustomerModal(false)} />
+              <div className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl relative z-10 overflow-hidden animate-in zoom-in-95 duration-300">
+                <div className="p-8 border-b border-slate-50 flex items-center justify-between">
+                  <h3 className="font-black text-xl">አዲስ ደንበኛ መመዝገቢያ</h3>
+                  <button onClick={() => setShowAddCustomerModal(false)} className="p-2 text-slate-400"><X className="w-6 h-6" /></button>
+                </div>
+                <form onSubmit={handleAddCustomer} className="p-8 space-y-6">
+                  <div className="space-y-4">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-400 uppercase ml-1">ሙሉ ስም</label>
+                      <input required className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold" value={newCustomerData.customer_name} onChange={e => setNewCustomerData({...newCustomerData, customer_name: e.target.value})} />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-400 uppercase ml-1">ስልክ ቁጥር</label>
+                      <input required type="tel" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold" value={newCustomerData.phone} onChange={e => setNewCustomerData({...newCustomerData, phone: e.target.value})} />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-400 uppercase ml-1">አድራሻ</label>
+                      <input required className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold" value={newCustomerData.address} onChange={e => setNewCustomerData({...newCustomerData, address: e.target.value})} />
+                    </div>
+                  </div>
+                  <button type="submit" disabled={isAddingCustomer} className="w-full py-5 bg-slate-900 text-white font-black uppercase rounded-2xl flex items-center justify-center gap-3">
+                    {isAddingCustomer ? <Loader2 className="animate-spin" /> : 'መዝግብ'}
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
 
           <footer className="p-6 border-t border-slate-100 bg-white safe-bottom">
              {!showCartMobile ? (

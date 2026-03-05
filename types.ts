@@ -65,3 +65,30 @@ export interface User {
   role: 'Admin' | 'Salesperson';
   created_at: string;
 }
+
+export interface Credit {
+  id: string;
+  credit_number: string;
+  customer_id: string;
+  sale_id: string;
+  total_amount: number;
+  remaining_amount: number;
+  status: 'Pending' | 'Paid' | 'Overdue';
+  credit_date: string;
+  due_date: string;
+  note: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreditPayment {
+  id: string;
+  credit_id: string;
+  amount: number;
+  payment_method: 'Cash' | 'Bank Transfer';
+  payment_date: string;
+  note: string;
+  received_by: string;
+  created_at: string;
+}

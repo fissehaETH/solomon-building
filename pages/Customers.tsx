@@ -10,15 +10,16 @@ import {
   UserPlus,
   CheckCircle2
 } from 'lucide-react';
-import { Customer } from '../types';
+import { Customer, Credit } from '../types';
 import { formatEthiopian } from '../utils/dateUtils';
 
 interface CustomersProps {
   customers: Customer[];
+  credits: Credit[];
   onAddCustomer: (customer: Omit<Customer, 'customer_id' | 'created_at'>) => Promise<void>;
 }
 
-const Customers: React.FC<CustomersProps> = ({ customers, onAddCustomer }) => {
+const Customers: React.FC<CustomersProps> = ({ customers, credits, onAddCustomer }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -85,8 +86,33 @@ const Customers: React.FC<CustomersProps> = ({ customers, onAddCustomer }) => {
               <div className="flex items-center gap-3 text-slate-500"><Phone className="w-4 h-4" /><span className="text-sm font-bold">{customer.phone}</span></div>
               <div className="flex items-center gap-3 text-slate-500"><MapPin className="w-4 h-4" /><span className="text-sm font-bold truncate">{customer.address}</span></div>
             </div>
-            <div className="mt-6 pt-6 border-t border-slate-50 flex justify-between items-center">
-               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">የተመዘገበበት፡ {formatEthiopian(customer.created_at)}</p>
+            <div className="mt-6 pt-6 border-t border-slate-50 flex flex-col gap-4">
+               {(() => {
+                 const customerCredits = credits.filter(c => c.customer_id === customer.customer_id && c.status !== 'Paid');
+                 const totalDebt = customerCredits.reduce((sum, c) => sum + Number(c.remaining_amount), 0);
+                 
+                 if (totalDebt > 0) {
+                   return (
+                     <div className="bg-red-50 p-4 rounded-2xl border border-red-100 flex items-center justify-between">
+                       <div>
+                         <p className="text-[9px] font-black text-red-400 uppercase tracking-widest">Total Debt</p>
+                         <p className="text-sm font-black text-red-600">{totalDebt.toLocaleString()} ETB</p>
+                       </div>
+                       <div className="text-right">
+                         <p className="text-[9px] font-black text-red-400 uppercase tracking-widest">Active Credits</p>
+                         <p className="text-sm font-black text-red-600">{customerCredits.length}</p>
+                       </div>
+                     </div>
+                   );
+                 }
+                 return (
+                   <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 flex items-center justify-center gap-2">
+                     <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                     <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">No Outstanding Debt</p>
+                   </div>
+                 );
+               })()}
+               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">የተመዘገበበት፡ {formatEthiopian(customer.created_at)}</p>
             </div>
           </div>
         ))}

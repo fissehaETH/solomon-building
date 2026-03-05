@@ -1,6 +1,7 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
+  CreditCard,
   LayoutDashboard,
   Package,
   ShoppingCart,
@@ -13,7 +14,8 @@ import {
   X,
   AlertTriangle,
   ArrowRight,
-  ChevronRight
+  ChevronRight,
+  Shield
 } from 'lucide-react';
 import { User, Product } from '../types';
 import BrandLogo from './BrandLogo';
@@ -44,18 +46,24 @@ const Layout: React.FC<LayoutProps> = ({
       { id: 'dashboard', label: 'Home', icon: LayoutDashboard },
       { id: 'inventory', label: 'Stock', icon: Package },
       { id: 'sales', label: 'POS', icon: ShoppingCart },
+      { id: 'credits', label: 'Credits', icon: CreditCard },
       { id: 'customers', label: 'Clients', icon: Users },
-      { id: 'purchases', label: 'Restock', icon: Truck }
+      { id: 'purchases', label: 'Restock', icon: Truck },
+      { id: 'users', label: 'Users', icon: Shield }
     ];
 
-    // Admin: Full access (stock, pos, clients, restock)
-    // Salesperson: stock, pos, restock (No Clients)
+    // Admin: Full access (stock, pos, clients, restock, users)
+    // Salesperson: stock, pos, restock (No Clients, No Users)
     if (currentUser?.role === 'Salesperson') {
-      return allItems.filter(item => item.id !== 'customers');
+      return allItems.filter(item => item.id !== 'customers' && item.id !== 'users');
     }
     
     return allItems;
   }, [currentUser]);
+
+  const bottomMenuItems = useMemo(() => {
+    return menuItems.filter(item => item.id !== 'credits' && item.id !== 'users');
+  }, [menuItems]);
 
   const initial = currentUser?.firstName?.[0]?.toUpperCase() ?? 'S';
 
@@ -310,7 +318,7 @@ const Layout: React.FC<LayoutProps> = ({
       </main>
 
       <nav className="md:hidden glass fixed bottom-0 left-0 right-0 h-20 border-t border-slate-200/60 flex items-center justify-around px-2 z-40 safe-bottom shrink-0">
-        {menuItems.map((item) => {
+        {bottomMenuItems.map((item) => {
           const isActive = activeTab === item.id;
           return (
             <button

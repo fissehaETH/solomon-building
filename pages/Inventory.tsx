@@ -13,7 +13,8 @@ import {
   CheckCircle2, 
   History, 
   AlertCircle,
-  AlertTriangle
+  AlertTriangle,
+  Trash2
 } from 'lucide-react';
 import { Product, Category, User } from '../types';
 
@@ -21,7 +22,9 @@ interface InventoryProps {
   products: Product[];
   categories: Category[];
   onAddProduct: (product: Omit<Product, 'product_id' | 'created_at'>) => Promise<void>;
+  onDeleteProduct: (productId: string) => Promise<void>;
   onAddCategory: (category: Omit<Category, 'catagory_id'>) => Promise<void>;
+  onDeleteCategory: (categoryId: string) => Promise<void>;
   onAdjustStock: (productId: string, change: number, reason: string) => Promise<void>;
   currentUser: User | null;
 }
@@ -131,13 +134,26 @@ const SearchableDropdown = ({
   );
 };
 
-const Inventory: React.FC<InventoryProps> = ({ products, categories, onAddProduct, onAddCategory, onAdjustStock, currentUser }) => {
+const Inventory: React.FC<InventoryProps> = ({ 
+  products, 
+  categories, 
+  onAddProduct, 
+  onDeleteProduct,
+  onAddCategory, 
+  onDeleteCategory,
+  onAdjustStock, 
+  currentUser 
+}) => {
+  const [activeTab, setActiveTab] = useState<'materials' | 'categories'>('materials');
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [adjustingProduct, setAdjustingProduct] = useState<Product | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null);
+  const [productToDelete, setProductToDelete] = useState<string | null>(null);
 
   // Requirements: Only 'Admin' and 'Salesperson' can manage stock.
   const canManageStock = currentUser?.role === 'Admin' || currentUser?.role === 'Salesperson';
@@ -259,6 +275,40 @@ const Inventory: React.FC<InventoryProps> = ({ products, categories, onAddProduc
     ConvertionRate: ''
   });
 
+  const handleDeleteCategory = async () => {
+    if (!categoryToDelete) return;
+    
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      await onDeleteCategory(categoryToDelete);
+      setSuccessMessage('Category deleted successfully');
+      setCategoryToDelete(null);
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete category');
+      setCategoryToDelete(null);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteProduct = async () => {
+    if (!productToDelete) return;
+    
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      await onDeleteProduct(productToDelete);
+      setSuccessMessage('Product deleted successfully');
+      setProductToDelete(null);
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete product');
+      setProductToDelete(null);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleCategorySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
@@ -278,6 +328,30 @@ const Inventory: React.FC<InventoryProps> = ({ products, categories, onAddProduc
   return (
     <div className="space-y-6">
       {successMessage && <Toast message={successMessage} onClose={() => setSuccessMessage(null)} />}
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-600 px-6 py-4 rounded-2xl flex items-center gap-3 animate-in fade-in duration-300">
+          <AlertCircle className="w-5 h-5" />
+          <span className="font-bold text-sm">{error}</span>
+          <button onClick={() => setError(null)} className="ml-auto p-1 hover:bg-red-100 rounded-lg">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-2xl w-fit">
+        <button
+          onClick={() => setActiveTab('materials')}
+          className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'materials' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+        >
+          Materials
+        </button>
+        <button
+          onClick={() => setActiveTab('categories')}
+          className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'categories' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+        >
+          Categories
+        </button>
+      </div>
 
       <div className="sticky top-0 z-20 bg-[#F8FAFC] -mx-4 px-4 md:-mx-8 md:px-8 -mt-4 md:-mt-8 pt-4 md:pt-8 pb-4 mb-2">
         <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
@@ -306,63 +380,127 @@ const Inventory: React.FC<InventoryProps> = ({ products, categories, onAddProduc
         </div>
       </div>
 
-      <div className="bg-white rounded-[2rem] border border-slate-100 shadow-xl overflow-hidden overflow-x-auto">
-        <table className="w-full text-left min-w-[700px]">
-          <thead className="bg-slate-50 border-b border-slate-100">
-            <tr>
-              <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Identity</th>
-              <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Store Unit</th>
-              <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">In Stock</th>
-              <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Price (ETB)</th>
-              <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-50">
-            {filteredProducts.map(p => {
-              const isLowStock = Number(p.stock_qty) <= Number(p.min_stock);
-              const ratio = getProductRatio(p);
-              const displayQty = p.stock_qty / ratio;
-              return (
-                <tr 
-                  key={p.product_id} 
-                  className={`transition-colors group ${isLowStock ? 'bg-orange-50/60 hover:bg-orange-100/60' : 'hover:bg-slate-50'}`}
-                >
-                  <td className="px-8 py-5">
-                     <div className="flex items-center gap-2">
-                        <p className="font-extrabold text-slate-800">{p.product_name}</p>
-                        {isLowStock && (
-                          <AlertTriangle className="w-4 h-4 text-orange-500 shrink-0 animate-pulse" />
+      {activeTab === 'materials' ? (
+        <div className="bg-white rounded-[2rem] border border-slate-100 shadow-xl overflow-hidden overflow-x-auto">
+          <table className="w-full text-left min-w-[700px]">
+            <thead className="bg-slate-50 border-b border-slate-100">
+              <tr>
+                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Identity</th>
+                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Store Unit</th>
+                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">In Stock</th>
+                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Price (ETB)</th>
+                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {filteredProducts.map(p => {
+                const isLowStock = Number(p.stock_qty) <= Number(p.min_stock);
+                const ratio = getProductRatio(p);
+                const displayQty = p.stock_qty / ratio;
+                return (
+                  <tr 
+                    key={p.product_id} 
+                    className={`transition-colors group ${isLowStock ? 'bg-orange-50/60 hover:bg-orange-100/60' : 'hover:bg-slate-50'}`}
+                  >
+                    <td className="px-8 py-5">
+                       <div className="flex items-center gap-2">
+                          <p className="font-extrabold text-slate-800">{p.product_name}</p>
+                          {isLowStock && (
+                            <AlertTriangle className="w-4 h-4 text-orange-500 shrink-0 animate-pulse" />
+                          )}
+                       </div>
+                       <p className="text-[10px] text-slate-400 font-bold uppercase">{p.brand} • {p.category}</p>
+                    </td>
+                    <td className="px-8 py-5 text-sm font-bold text-slate-600">{p.unit}</td>
+                    <td className={`px-8 py-5 text-center font-black ${isLowStock ? 'text-orange-600' : 'text-slate-900'}`}>
+                      {displayQty}
+                    </td>
+                    <td className="px-8 py-5 text-right font-black text-orange-600">
+                      {p.unit_price.toLocaleString()} <span className="text-[9px] font-bold text-slate-400 uppercase">per {p.unit}</span>
+                    </td>
+                    <td className="px-8 py-5 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        {canManageStock && (
+                          <button onClick={() => setAdjustingProduct(p)} className="p-2 text-slate-400 hover:text-orange-500 transition-colors">
+                            <History className="w-5 h-5" />
+                          </button>
                         )}
-                     </div>
-                     <p className="text-[10px] text-slate-400 font-bold uppercase">{p.brand} • {p.category}</p>
+                        {isAdmin && (
+                          <button 
+                            onClick={() => setProductToDelete(p.product_id)}
+                            className="p-2 text-slate-400 hover:text-red-500 transition-colors"
+                          >
+                            <Trash2 className="w-5 h-5" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+              {filteredProducts.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-8 py-20 text-center text-slate-400 italic">
+                    No materials found.
                   </td>
-                  <td className="px-8 py-5 text-sm font-bold text-slate-600">{p.unit}</td>
-                  <td className={`px-8 py-5 text-center font-black ${isLowStock ? 'text-orange-600' : 'text-slate-900'}`}>
-                    {displayQty}
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="bg-white rounded-[2rem] border border-slate-100 shadow-xl overflow-hidden overflow-x-auto">
+          <table className="w-full text-left min-w-[700px]">
+            <thead className="bg-slate-50 border-b border-slate-100">
+              <tr>
+                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Category Name</th>
+                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Units</th>
+                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Brands</th>
+                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {categories.filter(c => c.catagoryName.toLowerCase().includes(searchTerm.toLowerCase())).map(c => (
+                <tr key={c.catagory_id} className="hover:bg-slate-50 transition-colors">
+                  <td className="px-8 py-5">
+                    <p className="font-extrabold text-slate-800">{c.catagoryName}</p>
                   </td>
-                  <td className="px-8 py-5 text-right font-black text-orange-600">
-                    {p.unit_price.toLocaleString()} <span className="text-[9px] font-bold text-slate-400 uppercase">per {p.unit}</span>
+                  <td className="px-8 py-5">
+                    <div className="flex flex-wrap gap-1">
+                      {c.sellingUnit.split(',').map(u => (
+                        <span key={u} className="px-2 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-black uppercase tracking-wider">
+                          {u.trim()}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="px-8 py-5">
+                    <p className="text-xs font-bold text-slate-600">{c.brand}</p>
                   </td>
                   <td className="px-8 py-5 text-right">
-                    {canManageStock && (
-                      <button onClick={() => setAdjustingProduct(p)} className="p-2 text-slate-400 hover:text-orange-500 transition-colors">
-                        <History className="w-5 h-5" />
+                    {isAdmin && (
+                      <button 
+                        onClick={() => setCategoryToDelete(c.catagory_id)}
+                        disabled={isSubmitting}
+                        className="p-3 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 active:scale-95 transition-all disabled:opacity-50"
+                      >
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     )}
                   </td>
                 </tr>
-              );
-            })}
-            {filteredProducts.length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-8 py-20 text-center text-slate-400 italic">
-                  No materials found.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+              ))}
+              {categories.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="px-8 py-20 text-center text-slate-400 italic">
+                    No categories found.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {showAddModal && canManageStock && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-end md:items-center justify-center p-0 md:p-4">
@@ -479,6 +617,68 @@ const Inventory: React.FC<InventoryProps> = ({ products, categories, onAddProduc
                 setAdjustingProduct(null);
                 setAdjustment({ change: 0, reason: 'Correction' });
               }} className="flex-[2] py-5 bg-slate-900 text-white font-black uppercase rounded-2xl shadow-lg active:scale-95 transition-all">Apply Update</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {categoryToDelete && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[110] flex items-center justify-center p-6">
+          <div className="bg-white rounded-[2.5rem] w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 shadow-2xl">
+            <div className="p-10 text-center">
+              <div className="w-20 h-20 bg-red-50 text-red-500 rounded-3xl flex items-center justify-center mx-auto mb-8">
+                <Trash2 className="w-10 h-10" />
+              </div>
+              <h3 className="text-2xl font-black text-slate-900 tracking-tight mb-4">Delete Category?</h3>
+              <p className="text-slate-500 font-bold leading-relaxed mb-10">
+                Are you sure you want to delete <span className="text-slate-900">"{categories.find(c => c.catagory_id === categoryToDelete)?.catagoryName}"</span>? This action cannot be undone.
+              </p>
+              <div className="grid grid-cols-2 gap-4">
+                <button 
+                  onClick={() => setCategoryToDelete(null)}
+                  className="py-5 bg-slate-100 text-slate-600 font-black uppercase tracking-widest rounded-2xl hover:bg-slate-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={handleDeleteCategory}
+                  disabled={isSubmitting}
+                  className="py-5 bg-red-500 text-white font-black uppercase tracking-widest rounded-2xl hover:bg-red-600 shadow-lg shadow-red-500/20 active:scale-95 transition-all flex items-center justify-center gap-2"
+                >
+                  {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Yes, Delete'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {productToDelete && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[110] flex items-center justify-center p-6">
+          <div className="bg-white rounded-[2.5rem] w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 shadow-2xl">
+            <div className="p-10 text-center">
+              <div className="w-20 h-20 bg-red-50 text-red-500 rounded-3xl flex items-center justify-center mx-auto mb-8">
+                <Trash2 className="w-10 h-10" />
+              </div>
+              <h3 className="text-2xl font-black text-slate-900 tracking-tight mb-4">Delete Material?</h3>
+              <p className="text-slate-500 font-bold leading-relaxed mb-10">
+                Are you sure you want to delete <span className="text-slate-900">"{products.find(p => p.product_id === productToDelete)?.product_name}"</span>? This action cannot be undone.
+              </p>
+              <div className="grid grid-cols-2 gap-4">
+                <button 
+                  onClick={() => setProductToDelete(null)}
+                  className="py-5 bg-slate-100 text-slate-600 font-black uppercase tracking-widest rounded-2xl hover:bg-slate-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={handleDeleteProduct}
+                  disabled={isSubmitting}
+                  className="py-5 bg-red-500 text-white font-black uppercase tracking-widest rounded-2xl hover:bg-red-600 shadow-lg shadow-red-500/20 active:scale-95 transition-all flex items-center justify-center gap-2"
+                >
+                  {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Yes, Delete'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

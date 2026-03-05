@@ -6,9 +6,11 @@ import Inventory from './pages/Inventory';
 import Sales from './pages/Sales';
 import Purchases from './pages/Purchases';
 import Customers from './pages/Customers';
+import Users from './pages/Users';
+import Credits from './pages/Credits';
 import Login from './pages/Login';
 import { api } from './services/api';
-import { Product, Sale, Customer, User as UserType, Category, Purchase } from './types';
+import { Product, Sale, Customer, User as UserType, Category, Purchase, Credit, CreditPayment } from './types';
 import { Loader2, RefreshCcw, Wifi, WifiOff } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -17,7 +19,10 @@ const App: React.FC = () => {
   const [sales, setSales] = useState<Sale[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [credits, setCredits] = useState<Credit[]>([]);
+  const [creditPayments, setCreditPayments] = useState<CreditPayment[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [users, setUsers] = useState<UserType[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserType | null>(null);
   const [lastSynced, setLastSynced] = useState<string | null>(null);
@@ -46,7 +51,10 @@ const App: React.FC = () => {
       setSales(state.sales || []);
       setPurchases(state.purchases || []);
       setCustomers(state.customers || []);
+      setCredits(state.credits || []);
+      setCreditPayments(state.credit_payments || []);
       setCategories(state.categories || []);
+      setUsers(state.users || []);
       setLastSynced(state.lastSynced || null);
       
       // Check if current user still exists in the synced users list
@@ -154,12 +162,30 @@ const App: React.FC = () => {
     loadStateFromAPI();
   };
 
+  const handleDeleteProduct = async (productId: string) => {
+    if (currentUser && !api.isUserValid(currentUser.user_id)) {
+      handleLogout();
+      return;
+    }
+    await api.deleteProduct(productId);
+    loadStateFromAPI();
+  };
+
   const handleAddCategory = async (category: Omit<Category, 'catagory_id'>) => {
     if (currentUser && !api.isUserValid(currentUser.user_id)) {
       handleLogout();
       return;
     }
     await api.addCategory(category);
+    loadStateFromAPI();
+  };
+
+  const handleDeleteCategory = async (categoryId: string) => {
+    if (currentUser && !api.isUserValid(currentUser.user_id)) {
+      handleLogout();
+      return;
+    }
+    await api.deleteCategory(categoryId);
     loadStateFromAPI();
   };
 
@@ -199,11 +225,52 @@ const App: React.FC = () => {
     loadStateFromAPI();
   };
 
+  const handleAddUser = async (user: Omit<UserType, 'user_id' | 'created_at'>) => {
+    if (currentUser && !api.isUserValid(currentUser.user_id)) {
+      handleLogout();
+      return;
+    }
+    await api.addUser(user);
+    loadStateFromAPI();
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+    if (currentUser && !api.isUserValid(currentUser.user_id)) {
+      handleLogout();
+      return;
+    }
+    await api.deleteUser(userId);
+    loadStateFromAPI();
+  };
+
+  const handleAddCreditPayment = async (payment: Omit<CreditPayment, 'id' | 'created_at'>) => {
+    if (currentUser && !api.isUserValid(currentUser.user_id)) {
+      handleLogout();
+      return;
+    }
+    await api.addCreditPayment(payment);
+    loadStateFromAPI();
+  };
+
+  const handleAddBulkCreditPayment = async (data: {
+    customer_id: string;
+    amount: number;
+    payment_method: 'Cash' | 'Bank Transfer';
+    note: string;
+    received_by: string;
+  }) => {
+    if (currentUser && !api.isUserValid(currentUser.user_id)) {
+      handleLogout();
+      return;
+    }
+    await api.addBulkCreditPayment(data);
+    loadStateFromAPI();
+  };
+
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard':
-        // Fix: Added missing currentUser prop to Dashboard component (required by DashboardProps)
-        return <Dashboard products={products} sales={sales} customers={customers} categories={categories} currentUser={currentUser} />;
+        return <Dashboard products={products} sales={sales} customers={customers} credits={credits} categories={categories} currentUser={currentUser} />;
       case 'inventory':
         return (
           // Fixed line 130: Added currentUser prop which is required by Inventory component
@@ -211,7 +278,9 @@ const App: React.FC = () => {
             products={products} 
             categories={categories} 
             onAddProduct={handleAddProduct} 
+            onDeleteProduct={handleDeleteProduct}
             onAddCategory={handleAddCategory}
+            onDeleteCategory={handleDeleteCategory}
             onAdjustStock={handleAdjustStock}
             currentUser={currentUser}
           />
@@ -222,7 +291,9 @@ const App: React.FC = () => {
             products={products} 
             sales={sales} 
             categories={categories}
+            customers={customers}
             onAddSales={handleAddSales} 
+            onAddCustomer={handleRegisterCustomer}
           />
         );
       case 'purchases':
@@ -238,12 +309,33 @@ const App: React.FC = () => {
         return (
           <Customers 
             customers={customers} 
+            credits={credits}
             onAddCustomer={handleRegisterCustomer} 
           />
         );
+      case 'users':
+        return (
+          <Users 
+            users={users} 
+            onAddUser={handleAddUser} 
+            onDeleteUser={handleDeleteUser}
+            currentUser={currentUser}
+          />
+        );
+      case 'credits':
+        return (
+          <Credits 
+            credits={credits}
+            payments={creditPayments}
+            customers={customers}
+            sales={sales}
+            currentUser={currentUser}
+            onAddPayment={handleAddCreditPayment}
+            onAddBulkPayment={handleAddBulkCreditPayment}
+          />
+        );
       default:
-        // Fix: Added missing currentUser prop to Dashboard component (required by DashboardProps)
-        return <Dashboard products={products} sales={sales} customers={customers} categories={categories} currentUser={currentUser} />;
+        return <Dashboard products={products} sales={sales} customers={customers} credits={credits} categories={categories} currentUser={currentUser} />;
     }
   };
 
