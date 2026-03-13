@@ -139,8 +139,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                 transition={{ delay: 0.2 }}
                 className="text-center"
               >
-                <h1 className="text-3xl font-black text-slate-900 tracking-tight">ሰለሞን ህንጻ መሳሪያዎች</h1>
-                <p className="text-[10px] uppercase font-bold tracking-[0.3em] text-orange-500 mt-2">Building Materials Management</p>
+                <h1 className="text-3xl font-black text-slate-900 tracking-tight">ሰለሞን ህንፃ መሳሪያዎች</h1>
               </motion.div>
            </div>
 

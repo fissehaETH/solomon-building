@@ -362,7 +362,7 @@ class SolomonDB {
     });
   }
 
-  async addSales(salesItems: Omit<Sale, 'sale_id' | 'date'>[]): Promise<void> {
+  async addSales(salesItems: Omit<Sale, 'sale_id' | 'date'>[]): Promise<string> {
     return this.enqueue(async () => {
       await this.ensureInitialized();
       const date = new Date().toISOString();
@@ -371,6 +371,14 @@ class SolomonDB {
       
       this.cache.sales.push(...newSales);
       
+      // Check for negative stock before proceeding
+      for (const item of newSales) {
+        const p = this.cache.products.find((x: any) => x.product_id === item.product_id);
+        if (p && Number(p.stock_qty) < Number(item.base_quantity)) {
+          throw new Error(`Insufficient stock for ${p.product_name}. Available: ${p.stock_qty}, Requested: ${item.base_quantity}`);
+        }
+      }
+
       const isCredit = newSales[0]?.payment_method === 'Credit';
       let creditRecord: Credit | null = null;
 
@@ -444,6 +452,7 @@ class SolomonDB {
       }
       
       await this.persistCache();
+      return receiptId;
     });
   }
 
@@ -494,6 +503,9 @@ class SolomonDB {
       await this.ensureInitialized();
       const p = this.cache.products.find((x: any) => x.product_id === productId);
       if (p) {
+        if (Number(p.stock_qty) + change < 0) {
+          throw new Error(`Cannot adjust stock below zero. Current: ${p.stock_qty}, Adjustment: ${change}`);
+        }
         p.stock_qty = Number(p.stock_qty) + change;
         await this.persistCache();
         

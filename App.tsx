@@ -210,10 +210,11 @@ const App: React.FC = () => {
   const handleAddSales = async (salesItems: Omit<Sale, 'sale_id' | 'date'>[]) => {
     if (currentUser && !api.isUserValid(currentUser.user_id)) {
       handleLogout();
-      return;
+      return '';
     }
-    await api.addSales(salesItems);
+    const receiptId = await api.addSales(salesItems);
     loadStateFromAPI();
+    return receiptId;
   };
 
   const handleAddPurchases = async (purchaseItems: Omit<Purchase, 'purchase_id' | 'date'>[]) => {

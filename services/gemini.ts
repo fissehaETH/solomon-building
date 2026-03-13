@@ -2,11 +2,13 @@
 import { GoogleGenAI } from "@google/genai";
 import { Product, Sale } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 export async function getBusinessInsights(products: Product[], sales: Sale[]) {
   const prompt = `
     As a business consultant for "Solomon Building Materials Shop", analyze the current data and provide 3 key insights.
+    
+    IMPORTANT: Please provide the insights in Amharic (አማርኛ).
     
     Current Inventory:
     ${JSON.stringify(products.map(p => ({ name: p.product_name, stock: p.stock_qty, min: p.min_stock })), null, 2)}
@@ -15,11 +17,11 @@ export async function getBusinessInsights(products: Product[], sales: Sale[]) {
     ${JSON.stringify(sales.slice(-10).map(s => ({ item: s.product_name, qty: s.quantity, date: s.date })), null, 2)}
     
     Focus on:
-    1. Critical stock levels (low stock).
-    2. Fast-moving items.
-    3. Business growth suggestions.
+    1. Critical stock levels (low stock) - ወሳኝ የክምችት ደረጃዎች (ዝቅተኛ ክምችት).
+    2. Fast-moving items - በፍጥነት የሚሸጡ እቃዎች.
+    3. Business growth suggestions - የንግድ ዕድገት ጥቆማዎች.
     
-    Format the response as clear, bulleted points.
+    Format the response as clear, bulleted points in Amharic.
   `;
 
   try {
@@ -33,6 +35,6 @@ export async function getBusinessInsights(products: Product[], sales: Sale[]) {
     return response.text;
   } catch (error) {
     console.error("Gemini Insight Error:", error);
-    return "Unable to generate insights at this moment. Please check your stock levels manually.";
+    return "በአሁኑ ጊዜ ግንዛቤዎችን ማመንጨት አልተቻለም። እባክዎ የክምችት ደረጃዎን እራስዎ ያረጋግጡ።";
   }
 }

@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { Credit, CreditPayment, Customer, User, Sale } from '../types';
 import { formatEthiopian } from '../utils/dateUtils';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface CreditsProps {
   credits: Credit[];
@@ -58,6 +59,8 @@ const Credits: React.FC<CreditsProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Bank Transfer'>('Cash');
   const [paymentNote, setPaymentNote] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
 
   const filteredCredits = useMemo(() => {
     let result = credits.filter(credit => {
@@ -173,6 +176,8 @@ const Credits: React.FC<CreditsProps> = ({
       setShowPaymentModal(false);
       setPaymentAmount('');
       setPaymentNote('');
+      setSuccessMessage("ክፍያው በተሳካ ሁኔታ ተመዝግቧል!");
+      setTimeout(() => setSuccessMessage(null), 3000);
       // Refresh selected credit to show updated balance
       const updated = credits.find(c => c.id === selectedCredit.id);
       if (updated) setSelectedCredit(updated);
@@ -208,6 +213,8 @@ const Credits: React.FC<CreditsProps> = ({
       setShowBulkPaymentModal(false);
       setPaymentAmount('');
       setPaymentNote('');
+      setSuccessMessage("ክፍያው በተሳካ ሁኔታ ተመዝግቧል!");
+      setTimeout(() => setSuccessMessage(null), 3000);
     } catch (error) {
       console.error('Bulk payment failed:', error);
     } finally {
@@ -233,6 +240,20 @@ const Credits: React.FC<CreditsProps> = ({
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
+      <AnimatePresence>
+        {successMessage && (
+          <motion.div 
+            initial={{ opacity: 0, y: 20, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, x: '-50%' }}
+            exit={{ opacity: 0, y: 20, x: '-50%' }}
+            className="fixed bottom-24 left-1/2 bg-slate-900 text-white px-8 py-5 rounded-[2rem] shadow-2xl z-[100] flex items-center gap-3"
+          >
+            <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+            <span className="font-black text-sm uppercase tracking-widest">{successMessage}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Header & Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">

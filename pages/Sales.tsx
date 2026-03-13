@@ -16,6 +16,7 @@ import {
   UserPlus,
   User as UserIcon
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Product, Sale, Category, Customer } from '../types';
 import { formatEthiopian } from '../utils/dateUtils';
 
@@ -24,7 +25,7 @@ interface SalesProps {
   sales: Sale[];
   categories: Category[];
   customers: Customer[];
-  onAddSales: (salesItems: Omit<Sale, 'sale_id' | 'date'>[]) => Promise<void>;
+  onAddSales: (salesItems: Omit<Sale, 'sale_id' | 'date'>[]) => Promise<string>;
   onAddCustomer: (customer: Omit<Customer, 'customer_id' | 'created_at'>) => Promise<void>;
 }
 
@@ -313,10 +314,12 @@ const Sales: React.FC<SalesProps> = ({ products, sales, categories, customers, o
         recorded_by: 'Admin',
         paymentMethod: transactionInfo.payment_method
       })));
+
       setSuccessMessage("ሽያጩ በተሳካ ሁኔታ ተጠናቋል!");
       setCart([]);
       setShowPOS(false);
       setShowCartMobile(false);
+      setTransactionInfo({ customer_name: '', payment_method: 'Cash' });
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err: any) {
       console.error(err);
@@ -340,29 +343,60 @@ const Sales: React.FC<SalesProps> = ({ products, sales, categories, customers, o
     }
   };
 
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.05
+      }
+    }
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0 }
+  };
+
   return (
-    <div className="space-y-6">
-      {successMessage && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-8 py-5 rounded-[2rem] shadow-2xl z-[100] animate-in slide-in-from-bottom-4 flex items-center gap-3">
-          <span className="font-black text-sm uppercase tracking-widest">{successMessage}</span>
-        </div>
-      )}
+    <motion.div 
+      initial="hidden"
+      animate="visible"
+      variants={containerVariants}
+      className="space-y-6"
+    >
+      <AnimatePresence>
+        {successMessage && (
+          <motion.div 
+            initial={{ opacity: 0, y: 20, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, x: '-50%' }}
+            exit={{ opacity: 0, y: 20, x: '-50%' }}
+            className="fixed bottom-24 left-1/2 bg-slate-900 text-white px-8 py-5 rounded-[2rem] shadow-2xl z-[100] flex items-center gap-3"
+          >
+            <span className="font-black text-sm uppercase tracking-widest">{successMessage}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="space-y-4">
-        <div className="flex items-center justify-between gap-4">
+        <motion.div variants={itemVariants} className="flex items-center justify-between gap-4">
           <h3 className="text-xl font-black text-slate-800 tracking-tight ml-2">የቅርብ ጊዜ ደረሰኞች</h3>
           <button
             onClick={() => { setShowPOS(true); setShowCartMobile(false); }}
-            className="hidden md:inline-flex items-center gap-2 px-5 py-3 bg-orange-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl hover:bg-orange-700 transition-colors"
+            className="m3-button hidden md:inline-flex items-center gap-2 px-5 py-3 bg-orange-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl"
           >
             <Plus className="w-5 h-5 stroke-[3]" />
             New Sale
           </button>
-        </div>
+        </motion.div>
 
-        <div className="space-y-3">
+        <motion.div variants={itemVariants} className="space-y-3">
           {sales.slice().reverse().slice(0, 15).map((sale, idx) => (
-            <div key={idx} className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm flex items-center justify-between">
+            <motion.div 
+              layout
+              key={idx} 
+              className="premium-card p-5 flex items-center justify-between"
+            >
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-400">
                   <Receipt className="w-6 h-6" />
@@ -378,210 +412,249 @@ const Sales: React.FC<SalesProps> = ({ products, sales, categories, customers, o
                 <p className="font-black text-slate-900">{(Number(sale.quantity) * Number(sale.unitPrice)).toLocaleString()} ETB</p>
                 <p className="text-[10px] font-bold text-orange-600 uppercase tracking-tighter">{sale.quantity} {sale.sellingUnit}</p>
               </div>
-            </div>
+            </motion.div>
           ))}
-        </div>
+        </motion.div>
       </div>
 
-      <div className="md:hidden fixed bottom-24 right-6 z-[55]">
+      <motion.div variants={itemVariants} className="md:hidden fixed bottom-24 right-6 z-[55]">
          <button 
            onClick={() => { setShowPOS(true); setShowCartMobile(false); }}
            className="w-16 h-16 bg-orange-600 rounded-2xl shadow-2xl flex items-center justify-center text-white active:scale-90 transition-all"
          >
            <Plus className="w-8 h-8 stroke-[3]" />
          </button>
-      </div>
+      </motion.div>
 
-      {showPOS && (
-        <div className="fixed inset-0 bg-white z-[60] flex flex-col safe-top animate-in slide-in-from-bottom duration-300">
-          <header className="android-header flex justify-between border-b border-slate-100 shrink-0">
-             <button onClick={() => setShowPOS(false)} className="p-2 -ml-2 text-slate-600 rounded-full">
-               <X className="w-6 h-6" />
-             </button>
-             <span className="font-black text-lg">አዲስ ትዕዛዝ</span>
-             <div className="w-6" />
-          </header>
-
-          <div className="flex-1 overflow-y-auto p-6 space-y-8 scroll-container">
-             {!showCartMobile ? (
-               <>
-                 <SearchableProductDropdown products={products} selectedId={selectedItem.product_id} onSelect={(p) => setSelectedItem({...selectedItem, product_id: p.product_id})} />
-                 {selectedProduct && (
-                   <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
-                     <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white space-y-8 shadow-2xl">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <h4 className="text-2xl font-black tracking-tight leading-tight">{selectedProduct.product_name}</h4>
-                            <p className="text-sm text-slate-400 font-bold uppercase tracking-widest mt-1">{selectedProduct.brand}</p>
-                          </div>
-                          <div className="bg-white/10 px-4 py-2 rounded-2xl border border-white/10 text-right">
-                             <p className="text-[10px] font-black text-orange-400 uppercase">Available Stock</p>
-                             <p className="text-xl font-black">
-                               {selectedItem.ratioToBase > 0 ? (availableBaseStock / selectedItem.ratioToBase).toLocaleString(undefined, { maximumFractionDigits: 2 }) : 0} 
-                               <span className="text-xs font-bold text-slate-400"> {selectedItem.unit_name}</span>
-                             </p>
-                          </div>
-                        </div>
-
-                        <div className="space-y-4">
-                          <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">የመሸጫ ክፍያ (Unit)</label>
-                          <div className="grid grid-cols-2 gap-3">
-                            {availableUnits.map(u => {
-                              const pRatio = selectedProduct ? getProductUnitRatio(selectedProduct) : 1;
-                              const calculatedPrice = selectedProduct ? (selectedProduct.unit_price / pRatio) * u.ratioToBase : 0;
-                              return (
-                                <button 
-                                  key={u.name} 
-                                  type="button" 
-                                  onClick={() => setSelectedItem({
-                                    ...selectedItem, 
-                                    unit_name: u.name, 
-                                    ratioToBase: u.ratioToBase, 
-                                    unitPrice: calculatedPrice
-                                  })} 
-                                  className={`px-5 py-4 rounded-2xl text-[12px] font-black uppercase border transition-all ${selectedItem.unit_name === u.name ? 'bg-orange-600 border-orange-700 text-white' : 'bg-slate-800 border-slate-700 text-slate-500'}`}
-                                >
-                                  {u.name}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-6">
-                           <div className="space-y-2">
-                             <label className="text-[11px] font-black text-slate-500 uppercase ml-1">ብዛት (Qty)</label>
-                             <input type="number" className={`w-full bg-slate-800 rounded-2xl px-6 py-5 text-white font-black text-2xl outline-none border-2 transition-all ${isInsufficientStock ? 'border-red-500 text-red-500' : 'border-transparent'}`} value={selectedItem.quantity} onChange={(e) => setSelectedItem({...selectedItem, quantity: Number(e.target.value)})} />
-                           </div>
-                           <div className="space-y-2">
-                             <label className="text-[11px] font-black text-slate-500 uppercase ml-1">ዋጋ (Price)</label>
-                             <input type="number" className="w-full bg-slate-800 rounded-2xl px-6 py-5 text-white font-black text-2xl outline-none" value={selectedItem.unitPrice} onChange={(e) => setSelectedItem({...selectedItem, unitPrice: Number(e.target.value)})} />
-                           </div>
-                        </div>
-
-                        {isInsufficientStock && (
-                          <div className="bg-red-500/20 border border-red-500/30 p-4 rounded-2xl flex items-center gap-3 animate-pulse">
-                            <AlertTriangle className="w-5 h-5 text-red-500 shrink-0" />
-                            <p className="text-[10px] font-black text-red-100 uppercase leading-tight">
-                              Insufficient Stock. You only have {(availableBaseStock / selectedItem.ratioToBase).toFixed(2)} {selectedItem.unit_name} available.
-                            </p>
-                          </div>
-                        )}
-
-                        <button 
-                          onClick={addToCart} 
-                          disabled={isInsufficientStock || selectedItem.quantity <= 0}
-                          className={`w-full py-6 rounded-2xl font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-3 transition-all ${addedAnimation ? 'bg-emerald-600' : isInsufficientStock ? 'bg-red-900/50 text-red-400 grayscale' : 'bg-orange-600'}`}
-                        >
-                          {addedAnimation ? <Check /> : isInsufficientStock ? 'Insufficient Stock' : <><Plus /> ጨምር</>}
-                        </button>
-                     </div>
-                   </div>
-                 )}
-               </>
-             ) : (
-               <div className="animate-in slide-in-from-right duration-300">
-                  <div className="flex items-center justify-between mb-8">
-                    <h3 className="text-2xl font-black">ትዕዛዝ ማጠቃለያ</h3>
-                    <span className="bg-orange-600 text-white px-3 py-1 rounded-xl text-[10px] font-black">{cart.length} እቃዎች</span>
-                  </div>
-                  <div className="space-y-4">
-                    {cart.map((item, idx) => (
-                      <div key={idx} className="bg-slate-50 p-5 rounded-3xl flex items-center justify-between">
-                         <div>
-                           <p className="font-black text-slate-800">{item.product_name}</p>
-                           <p className="text-[11px] font-bold text-slate-400 uppercase">{item.quantity} {item.sellingUnit} @ {item.unitPrice}</p>
-                         </div>
-                         <div className="flex items-center gap-4">
-                            <span className="font-black">{(item.quantity * item.unitPrice).toLocaleString()}</span>
-                            <button onClick={() => removeFromCart(idx)} className="text-red-500 p-2"><Trash2 className="w-5 h-5" /></button>
-                         </div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-12 space-y-6">
-                     <div className="space-y-4">
-                        <label className="text-[11px] font-black text-slate-400 uppercase ml-1 tracking-widest">የክፍያ ዘዴ (Payment Method)</label>
-                        <div className="grid grid-cols-3 gap-3">
-                          {(['Cash', 'Bank Transfer', 'Credit'] as const).map((method) => (
-                            <button
-                              key={method}
-                              type="button"
-                              onClick={() => setTransactionInfo({...transactionInfo, payment_method: method})}
-                              className={`py-4 rounded-2xl border-2 font-black text-[10px] uppercase tracking-widest transition-all ${transactionInfo.payment_method === method ? 'border-orange-500 bg-orange-50 text-orange-600' : 'border-slate-100 text-slate-400 hover:border-slate-200'}`}
-                            >
-                              {method}
-                            </button>
-                          ))}
-                        </div>
-                     </div>
-
-                     <div className="space-y-2">
-                        {transactionInfo.payment_method === 'Credit' ? (
-                          <SearchableCustomerDropdown 
-                            customers={customers} 
-                            selectedName={transactionInfo.customer_name} 
-                            onSelect={(name) => setTransactionInfo({ ...transactionInfo, customer_name: name })}
-                            onAddNew={() => setShowAddCustomerModal(true)}
-                          />
-                        ) : (
-                          <>
-                            <label className="text-[11px] font-black text-slate-400 uppercase ml-1">የደንበኛ ስም (Customer)</label>
-                            <input className="w-full px-6 py-5 bg-slate-50 border border-slate-200 rounded-[1.5rem] outline-none font-bold" value={transactionInfo.customer_name} onChange={(e) => setTransactionInfo({...transactionInfo, customer_name: e.target.value})} placeholder="በመደበኛ ደንበኛ" />
-                          </>
-                        )}
-                     </div>
-                  </div>
-               </div>
-             )}
-          </div>
-
-          {showAddCustomerModal && (
-            <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
-              <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowAddCustomerModal(false)} />
-              <div className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl relative z-10 overflow-hidden animate-in zoom-in-95 duration-300">
-                <div className="p-8 border-b border-slate-50 flex items-center justify-between">
-                  <h3 className="font-black text-xl">አዲስ ደንበኛ መመዝገቢያ</h3>
-                  <button onClick={() => setShowAddCustomerModal(false)} className="p-2 text-slate-400"><X className="w-6 h-6" /></button>
-                </div>
-                <form onSubmit={handleAddCustomer} className="p-8 space-y-6">
-                  <div className="space-y-4">
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-black text-slate-400 uppercase ml-1">ሙሉ ስም</label>
-                      <input required className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold" value={newCustomerData.customer_name} onChange={e => setNewCustomerData({...newCustomerData, customer_name: e.target.value})} />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-black text-slate-400 uppercase ml-1">ስልክ ቁጥር</label>
-                      <input required type="tel" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold" value={newCustomerData.phone} onChange={e => setNewCustomerData({...newCustomerData, phone: e.target.value})} />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-black text-slate-400 uppercase ml-1">አድራሻ</label>
-                      <input required className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold" value={newCustomerData.address} onChange={e => setNewCustomerData({...newCustomerData, address: e.target.value})} />
-                    </div>
-                  </div>
-                  <button type="submit" disabled={isAddingCustomer} className="w-full py-5 bg-slate-900 text-white font-black uppercase rounded-2xl flex items-center justify-center gap-3">
-                    {isAddingCustomer ? <Loader2 className="animate-spin" /> : 'መዝግብ'}
-                  </button>
-                </form>
-              </div>
-            </div>
-          )}
-
-          <footer className="p-6 border-t border-slate-100 bg-white safe-bottom">
-             {!showCartMobile ? (
-               <button onClick={() => setShowCartMobile(true)} disabled={cart.length === 0} className="w-full py-6 bg-slate-900 text-white rounded-[2rem] font-black uppercase tracking-widest flex items-center justify-between px-8 disabled:opacity-20">
-                 <span>ትዕዛዝን ይመልከቱ</span>
-                 <span className="flex items-center gap-2">{cartTotal.toLocaleString()} ETB <ChevronRight className="w-5 h-5" /></span>
+      <AnimatePresence>
+        {showPOS && (
+          <motion.div 
+            initial={{ opacity: 0, y: '100%' }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: '100%' }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            className="fixed inset-0 bg-white z-[60] flex flex-col safe-top"
+          >
+            <header className="android-header flex justify-between border-b border-slate-100 shrink-0">
+               <button onClick={() => setShowPOS(false)} className="p-2 -ml-2 text-slate-600 rounded-full">
+                 <X className="w-6 h-6" />
                </button>
-             ) : (
-               <div className="flex items-center gap-4">
-                  <button onClick={() => setShowCartMobile(false)} className="w-20 h-16 bg-slate-100 rounded-[1.5rem] flex items-center justify-center text-slate-600"><ArrowLeft className="w-6 h-6" /></button>
-                  <button onClick={handleFinalize} disabled={isSaving} className="flex-1 py-6 bg-orange-600 text-white rounded-[1.5rem] font-black uppercase tracking-widest flex items-center justify-center gap-3">{isSaving ? <Loader2 className="w-6 h-6 animate-spin" /> : <>አጠናቅ (Finalize)</>}</button>
-               </div>
-             )}
-          </footer>
-        </div>
-      )}
-    </div>
+               <span className="font-black text-lg">አዲስ ትዕዛዝ</span>
+               <div className="w-6" />
+            </header>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-8 scroll-container">
+               {!showCartMobile ? (
+                 <motion.div 
+                   initial={{ opacity: 0, x: -20 }}
+                   animate={{ opacity: 1, x: 0 }}
+                   exit={{ opacity: 0, x: -20 }}
+                   className="space-y-8"
+                 >
+                   <SearchableProductDropdown products={products} selectedId={selectedItem.product_id} onSelect={(p) => setSelectedItem({...selectedItem, product_id: p.product_id})} />
+                   {selectedProduct && (
+                     <motion.div 
+                       initial={{ opacity: 0, y: 20 }}
+                       animate={{ opacity: 1, y: 0 }}
+                       className="space-y-6"
+                     >
+                       <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white space-y-8 shadow-2xl">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <h4 className="text-2xl font-black tracking-tight leading-tight">{selectedProduct.product_name}</h4>
+                              <p className="text-sm text-slate-400 font-bold uppercase tracking-widest mt-1">{selectedProduct.brand}</p>
+                            </div>
+                            <div className="bg-white/10 px-4 py-2 rounded-2xl border border-white/10 text-right">
+                               <p className="text-[10px] font-black text-orange-400 uppercase">Available Stock</p>
+                               <p className="text-xl font-black">
+                                 {selectedItem.ratioToBase > 0 ? (availableBaseStock / selectedItem.ratioToBase).toLocaleString(undefined, { maximumFractionDigits: 2 }) : 0} 
+                                 <span className="text-xs font-bold text-slate-400"> {selectedItem.unit_name}</span>
+                               </p>
+                            </div>
+                          </div>
+
+                          <div className="space-y-4">
+                            <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">የመሸጫ ክፍያ (Unit)</label>
+                            <div className="grid grid-cols-2 gap-3">
+                              {availableUnits.map(u => {
+                                const pRatio = selectedProduct ? getProductUnitRatio(selectedProduct) : 1;
+                                const calculatedPrice = selectedProduct ? (selectedProduct.unit_price / pRatio) * u.ratioToBase : 0;
+                                return (
+                                  <button 
+                                    key={u.name} 
+                                    type="button" 
+                                    onClick={() => setSelectedItem({
+                                      ...selectedItem, 
+                                      unit_name: u.name, 
+                                      ratioToBase: u.ratioToBase, 
+                                      unitPrice: calculatedPrice
+                                    })} 
+                                    className={`px-5 py-4 rounded-2xl text-[12px] font-black uppercase border transition-all ${selectedItem.unit_name === u.name ? 'bg-orange-600 border-orange-700 text-white' : 'bg-slate-800 border-slate-700 text-slate-500'}`}
+                                  >
+                                    {u.name}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-6">
+                             <div className="space-y-2">
+                               <label className="text-[11px] font-black text-slate-500 uppercase ml-1">ብዛት (Qty)</label>
+                               <input type="number" className={`w-full bg-slate-800 rounded-2xl px-6 py-5 text-white font-black text-2xl outline-none border-2 transition-all ${isInsufficientStock ? 'border-red-500 text-red-500' : 'border-transparent'}`} value={selectedItem.quantity} onChange={(e) => setSelectedItem({...selectedItem, quantity: Number(e.target.value)})} />
+                             </div>
+                             <div className="space-y-2">
+                               <label className="text-[11px] font-black text-slate-500 uppercase ml-1">ዋጋ (Price)</label>
+                               <input type="number" className="w-full bg-slate-800 rounded-2xl px-6 py-5 text-white font-black text-2xl outline-none" value={selectedItem.unitPrice} onChange={(e) => setSelectedItem({...selectedItem, unitPrice: Number(e.target.value)})} />
+                             </div>
+                          </div>
+
+                          {isInsufficientStock && (
+                            <div className="bg-red-500/20 border border-red-500/30 p-4 rounded-2xl flex items-center gap-3 animate-pulse">
+                              <AlertTriangle className="w-5 h-5 text-red-500 shrink-0" />
+                              <p className="text-[10px] font-black text-red-100 uppercase leading-tight">
+                                Insufficient Stock. You only have {(availableBaseStock / selectedItem.ratioToBase).toFixed(2)} {selectedItem.unit_name} available.
+                              </p>
+                            </div>
+                          )}
+
+                          <button 
+                            onClick={addToCart} 
+                            disabled={isInsufficientStock || selectedItem.quantity <= 0}
+                            className={`m3-button w-full py-6 rounded-2xl font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-3 transition-all ${addedAnimation ? 'bg-emerald-600' : isInsufficientStock ? 'bg-red-900/50 text-red-400 grayscale' : 'bg-orange-600'}`}
+                          >
+                            {addedAnimation ? <Check /> : isInsufficientStock ? 'Insufficient Stock' : <><Plus /> ጨምር</>}
+                          </button>
+                        </div>
+                      </motion.div>
+                    )}
+                  </motion.div>
+                ) : (
+                 <motion.div 
+                   initial={{ opacity: 0, x: 20 }}
+                   animate={{ opacity: 1, x: 0 }}
+                   exit={{ opacity: 0, x: 20 }}
+                   className="space-y-8"
+                 >
+                    <div className="flex items-center justify-between mb-8">
+                      <h3 className="text-2xl font-black">ትዕዛዝ ማጠቃለያ</h3>
+                      <span className="bg-orange-600 text-white px-3 py-1 rounded-xl text-[10px] font-black">{cart.length} እቃዎች</span>
+                    </div>
+                    <div className="space-y-4">
+                      {cart.map((item, idx) => (
+                        <motion.div 
+                          layout
+                          key={idx} 
+                          className="bg-slate-50 p-5 rounded-3xl flex items-center justify-between"
+                        >
+                           <div>
+                             <p className="font-black text-slate-800">{item.product_name}</p>
+                             <p className="text-[11px] font-bold text-slate-400 uppercase">{item.quantity} {item.sellingUnit} @ {item.unitPrice}</p>
+                           </div>
+                           <div className="flex items-center gap-4">
+                              <span className="font-black">{(item.quantity * item.unitPrice).toLocaleString()}</span>
+                              <button onClick={() => removeFromCart(idx)} className="text-red-500 p-2"><Trash2 className="w-5 h-5" /></button>
+                           </div>
+                        </motion.div>
+                      ))}
+                    </div>
+                    <div className="mt-12 space-y-6">
+                       <div className="space-y-4">
+                          <label className="text-[11px] font-black text-slate-400 uppercase ml-1 tracking-widest">የክፍያ ዘዴ (Payment Method)</label>
+                          <div className="grid grid-cols-3 gap-3">
+                            {(['Cash', 'Bank Transfer', 'Credit'] as const).map((method) => (
+                              <button
+                                key={method}
+                                type="button"
+                                onClick={() => setTransactionInfo({...transactionInfo, payment_method: method})}
+                                className={`py-4 rounded-2xl border-2 font-black text-[10px] uppercase tracking-widest transition-all ${transactionInfo.payment_method === method ? 'border-orange-500 bg-orange-50 text-orange-600' : 'border-slate-100 text-slate-400 hover:border-slate-200'}`}
+                              >
+                                {method}
+                              </button>
+                            ))}
+                          </div>
+                       </div>
+
+                       <div className="space-y-2">
+                          {transactionInfo.payment_method === 'Credit' ? (
+                            <SearchableCustomerDropdown 
+                              customers={customers} 
+                              selectedName={transactionInfo.customer_name} 
+                              onSelect={(name) => setTransactionInfo({ ...transactionInfo, customer_name: name })}
+                              onAddNew={() => setShowAddCustomerModal(true)}
+                            />
+                          ) : (
+                            <>
+                              <label className="text-[11px] font-black text-slate-400 uppercase ml-1">የደንበኛ ስም (Customer)</label>
+                              <input className="w-full px-6 py-5 bg-slate-50 border border-slate-200 rounded-[1.5rem] outline-none font-bold" value={transactionInfo.customer_name} onChange={(e) => setTransactionInfo({...transactionInfo, customer_name: e.target.value})} placeholder="በመደበኛ ደንበኛ" />
+                            </>
+                          )}
+                       </div>
+                    </div>
+                 </motion.div>
+               )}
+            </div>
+
+            <AnimatePresence>
+              {showAddCustomerModal && (
+                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" 
+                    onClick={() => setShowAddCustomerModal(false)} 
+                  />
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl relative z-10 overflow-hidden"
+                  >
+                    <div className="p-8 border-b border-slate-50 flex items-center justify-between">
+                      <h3 className="font-black text-xl">አዲስ ደንበኛ መመዝገቢያ</h3>
+                      <button onClick={() => setShowAddCustomerModal(false)} className="p-2 text-slate-400"><X className="w-6 h-6" /></button>
+                    </div>
+                    <form onSubmit={handleAddCustomer} className="p-8 space-y-6">
+                      <div className="space-y-4">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black text-slate-400 uppercase ml-1">ሙሉ ስም</label>
+                          <input required className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold" value={newCustomerData.customer_name} onChange={e => setNewCustomerData({...newCustomerData, customer_name: e.target.value})} />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black text-slate-400 uppercase ml-1">ስልክ ቁጥር</label>
+                          <input required type="tel" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold" value={newCustomerData.phone} onChange={e => setNewCustomerData({...newCustomerData, phone: e.target.value})} />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black text-slate-400 uppercase ml-1">አድራሻ</label>
+                          <input required className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold" value={newCustomerData.address} onChange={e => setNewCustomerData({...newCustomerData, address: e.target.value})} />
+                        </div>
+                      </div>
+                      <button type="submit" disabled={isAddingCustomer} className="m3-button w-full py-5 bg-slate-900 text-white font-black uppercase rounded-2xl flex items-center justify-center gap-3">
+                        {isAddingCustomer ? <Loader2 className="animate-spin" /> : 'መዝግብ'}
+                      </button>
+                    </form>
+                  </motion.div>
+                </div>
+              )}
+            </AnimatePresence>
+
+            <footer className="p-6 border-t border-slate-100 bg-white safe-bottom">
+               {!showCartMobile ? (
+                 <button onClick={() => setShowCartMobile(true)} disabled={cart.length === 0} className="m3-button w-full py-6 bg-slate-900 text-white rounded-[2rem] font-black uppercase tracking-widest flex items-center justify-between px-8 disabled:opacity-20">
+                   <span>ትዕዛዝን ይመልከቱ</span>
+                   <span className="flex items-center gap-2">{cartTotal.toLocaleString()} ETB <ChevronRight className="w-5 h-5" /></span>
+                 </button>
+               ) : (
+                 <div className="flex items-center gap-4">
+                    <button onClick={() => setShowCartMobile(false)} className="w-20 h-16 bg-slate-100 rounded-[1.5rem] flex items-center justify-center text-slate-600"><ArrowLeft className="w-6 h-6" /></button>
+                    <button onClick={handleFinalize} disabled={isSaving} className="m3-button flex-1 py-6 bg-orange-600 text-white rounded-[1.5rem] font-black uppercase tracking-widest flex items-center justify-center gap-3">{isSaving ? <Loader2 className="w-6 h-6 animate-spin" /> : <>አጠናቅ (Finalize)</>}</button>
+                 </div>
+               )}
+            </footer>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 };
 
