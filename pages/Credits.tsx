@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { Credit, CreditPayment, Customer, User, Sale } from '../types';
 import { formatEthiopian } from '../utils/dateUtils';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface CreditsProps {
   credits: Credit[];

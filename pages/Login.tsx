@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Loader2, Lock, AlertCircle, ArrowRight, ShieldCheck, Eye, EyeOff, User as UserIcon } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { api } from '../services/api';
 import { User as UserType } from '../types';
 import BrandLogo from '../components/BrandLogo';
@@ -59,7 +59,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                 className="flex items-center gap-6 mb-24"
               >
                  <div className="p-1 bg-white rounded-[1.5rem] shadow-2xl shadow-orange-500/20 transform hover:rotate-6 transition-transform cursor-pointer">
-                   <BrandLogo size={450} />
+                   <BrandLogo size={320} />
                  </div>
                  <div className="text-white">
                     <h2 className="text-4xl font-black tracking-tighter leading-none uppercase">ሰሎሞን</h2>
@@ -131,7 +131,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                 animate={{ scale: 1, opacity: 1 }}
                 className="bg-white p-3 rounded-[2.5rem] shadow-2xl shadow-orange-500/10 mb-6 border border-slate-50"
               >
-                <BrandLogo size={180} />
+                <BrandLogo size={140} />
               </motion.div>
               <motion.div
                 initial={{ y: 10, opacity: 0 }}

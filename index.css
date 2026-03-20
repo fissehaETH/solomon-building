@@ -111,6 +111,26 @@ body {
   border-radius: 10px;
 }
 
+/* Hide scrollbar utility */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Hide scrollbars on mobile/tablet globally */
+@media (max-width: 1024px) {
+  *::-webkit-scrollbar {
+    display: none;
+  }
+  * {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
 .scroll-container {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;

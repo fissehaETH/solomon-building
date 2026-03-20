@@ -16,7 +16,7 @@ import {
   AlertTriangle,
   Trash2
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { Product, Category, User } from '../types';
 
 interface InventoryProps {

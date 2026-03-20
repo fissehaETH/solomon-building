@@ -16,7 +16,7 @@ import {
   UserPlus,
   User as UserIcon
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { Product, Sale, Category, Customer } from '../types';
 import { formatEthiopian } from '../utils/dateUtils';
 

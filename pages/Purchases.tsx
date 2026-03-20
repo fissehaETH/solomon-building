@@ -14,7 +14,7 @@ import {
   Search,
   X
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { Product, Purchase, Category } from '../types';
 import { formatEthiopian } from '../utils/dateUtils';
 

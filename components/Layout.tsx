@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   CreditCard,
   LayoutDashboard,
@@ -163,7 +163,7 @@ const Layout: React.FC<LayoutProps> = ({
             whileHover={{ rotate: 5, scale: 1.05 }}
             className="bg-white p-2.5 rounded-[1.25rem] shadow-lg shadow-orange-500/20"
           >
-            <BrandLogo size={64} color="white" />
+            <BrandLogo size={52} color="white" />
           </motion.div>
           <div>
             <h1 className="font-black text-2xl tracking-tighter leading-none">Solomon</h1>
@@ -269,7 +269,7 @@ const Layout: React.FC<LayoutProps> = ({
                   whileHover={{ scale: 1.05 }}
                   className="bg-orange-500 p-4 rounded-[2rem] shadow-2xl shadow-orange-500/30"
                 >
-                  <BrandLogo size={120} color="white" />
+                  <BrandLogo size={100} color="white" />
                 </motion.div>
                 <div className="text-center">
                   <h1 className="font-black text-2xl text-slate-900 tracking-tighter">Solomon</h1>
