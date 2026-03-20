@@ -157,13 +157,13 @@ const Layout: React.FC<LayoutProps> = ({
 
   return (
     <div className="flex h-screen w-full bg-[#F8FAFC] overflow-hidden flex-col md:flex-row font-sans">
-      <aside className="hidden md:flex w-80 bg-slate-900 text-white flex-col shrink-0 border-r border-white/5">
+      <aside className="hidden md:flex w-80 bg-white text-white flex-col shrink-0 border-r border-white/5">
         <div className="p-10 flex items-center gap-5">
           <motion.div 
             whileHover={{ rotate: 5, scale: 1.05 }}
-            className="bg-orange-500 p-2.5 rounded-[1.25rem] shadow-lg shadow-orange-500/20"
+            className="bg-white p-2.5 rounded-[1.25rem] shadow-lg shadow-orange-500/20"
           >
-            <BrandLogo size={36} color="white" />
+            <BrandLogo size={64} color="white" />
           </motion.div>
           <div>
             <h1 className="font-black text-2xl tracking-tighter leading-none">Solomon</h1>
@@ -269,10 +269,10 @@ const Layout: React.FC<LayoutProps> = ({
                   whileHover={{ scale: 1.05 }}
                   className="bg-orange-500 p-4 rounded-[2rem] shadow-2xl shadow-orange-500/30"
                 >
-                  <BrandLogo size={56} color="white" />
+                  <BrandLogo size={120} color="white" />
                 </motion.div>
                 <div className="text-center">
-                  <h1 className="font-black text-2xl text-slate-900 tracking-tighter">Solomon Build</h1>
+                  <h1 className="font-black text-2xl text-slate-900 tracking-tighter">Solomon</h1>
                   <p className="text-[11px] uppercase font-bold tracking-[0.25em] text-slate-400 mt-1">Building Materials</p>
                 </div>
               </div>
