@@ -1,6 +1,6 @@
 
 import { Product, Sale, Customer, User, Category, Purchase, Credit, CreditPayment } from '../types';
-import pkg from '../package.json';
+// import pkg from '../package.json';
 import { db } from './firebase';
 import { 
   collection, 
@@ -15,7 +15,7 @@ import {
   deleteDoc
 } from 'firebase/firestore';
 
-const APP_VERSION = pkg.version;
+const APP_VERSION = '1.5.0';
 const DB_NAME = 'SolomonBuildingMaterialsDB';
 const STORE_NAME = 'app_state';
 const DB_VERSION = 1;

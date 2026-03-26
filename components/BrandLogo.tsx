@@ -9,7 +9,7 @@ interface BrandLogoProps {
 
 const BrandLogo: React.FC<BrandLogoProps> = ({ 
   className = "", 
-  size = 400
+  size = 200
 }) => {
   return (
 
@@ -21,6 +21,7 @@ const BrandLogo: React.FC<BrandLogoProps> = ({
       className={`${className} h-auto object-contain rounded-2xl`}
       style={{ maxWidth: size }}
       loading="lazy"
+      referrerPolicy="no-referrer"
     />
 
   );

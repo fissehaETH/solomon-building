@@ -42,6 +42,7 @@ const Layout: React.FC<LayoutProps> = ({
   const [showNotifications, setShowNotifications] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const notificationRef = useRef<HTMLDivElement>(null);
+  console.log('Layout: Rendering...', { activeTab, currentUser: !!currentUser });
 
   const menuItems = useMemo(() => {
     const allItems = [
@@ -157,13 +158,13 @@ const Layout: React.FC<LayoutProps> = ({
 
   return (
     <div className="flex h-screen w-full bg-[#F8FAFC] overflow-hidden flex-col md:flex-row font-sans">
-      <aside className="hidden md:flex w-80 bg-white text-white flex-col shrink-0 border-r border-white/5">
+      <aside className="hidden md:flex w-80 bg-slate-900 text-white flex-col shrink-0 border-r border-white/5">
         <div className="p-10 flex items-center gap-5">
           <motion.div 
             whileHover={{ rotate: 5, scale: 1.05 }}
-            className="bg-white p-2.5 rounded-[1.25rem] shadow-lg shadow-orange-500/20"
+            className="bg-white p-3 rounded-[1.25rem] shadow-lg shadow-orange-500/20"
           >
-            <BrandLogo size={52} color="white" />
+            <BrandLogo size={32} />
           </motion.div>
           <div>
             <h1 className="font-black text-2xl tracking-tighter leading-none">Solomon</h1>
@@ -267,9 +268,9 @@ const Layout: React.FC<LayoutProps> = ({
               <div className="p-10 border-b border-slate-50 bg-slate-50/30 flex flex-col items-center gap-5">
                 <motion.div 
                   whileHover={{ scale: 1.05 }}
-                  className="bg-orange-500 p-4 rounded-[2rem] shadow-2xl shadow-orange-500/30"
+                  className="bg-white p-6 rounded-[2rem] shadow-2xl shadow-orange-500/10"
                 >
-                  <BrandLogo size={100} color="white" />
+                  <BrandLogo size={60} />
                 </motion.div>
                 <div className="text-center">
                   <h1 className="font-black text-2xl text-slate-900 tracking-tighter">Solomon</h1>

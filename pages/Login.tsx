@@ -40,6 +40,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     }
   };
 
+  console.log('Login: Rendering...');
   return (
     <div className="min-h-screen blueprint flex items-center justify-center p-0 sm:p-4 md:p-8 lg:p-12 overflow-y-auto selection:bg-orange-500/30">
       <motion.div 
@@ -58,8 +59,8 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                 transition={{ delay: 0.2, duration: 0.8 }}
                 className="flex items-center gap-6 mb-24"
               >
-                 <div className="p-1 bg-white rounded-[1.5rem] shadow-2xl shadow-orange-500/20 transform hover:rotate-6 transition-transform cursor-pointer">
-                   <BrandLogo size={320} />
+                 <div className="p-4 bg-white rounded-[1.5rem] shadow-2xl shadow-orange-500/20 transform hover:rotate-6 transition-transform cursor-pointer">
+                   <BrandLogo size={180} />
                  </div>
                  <div className="text-white">
                     <h2 className="text-4xl font-black tracking-tighter leading-none uppercase">ሰሎሞን</h2>
@@ -129,9 +130,9 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
               <motion.div 
                 initial={{ scale: 0.8, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
-                className="bg-white p-3 rounded-[2.5rem] shadow-2xl shadow-orange-500/10 mb-6 border border-slate-50"
+                className="bg-white p-5 rounded-[2.5rem] shadow-2xl shadow-orange-500/10 mb-6 border border-slate-50"
               >
-                <BrandLogo size={140} />
+                <BrandLogo size={70} />
               </motion.div>
               <motion.div
                 initial={{ y: 10, opacity: 0 }}

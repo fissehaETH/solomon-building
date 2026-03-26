@@ -68,29 +68,41 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
+    console.log('App: Initializing...');
     const initApp = async () => {
-      await api.initialize();
-      
-      const savedUser = localStorage.getItem('solomon_session');
-      let initialUser: UserType | null = null;
-      if (savedUser) {
-        try {
-          initialUser = JSON.parse(savedUser);
-          if (initialUser) {
-            const userExists = api.isUserValid(initialUser.user_id);
-            if (!userExists) {
-              localStorage.removeItem('solomon_session');
-              initialUser = null;
+      try {
+        await api.initialize();
+        console.log('App: API Initialized');
+        
+        const savedUser = localStorage.getItem('solomon_session');
+        let initialUser: UserType | null = null;
+        if (savedUser) {
+          try {
+            initialUser = JSON.parse(savedUser);
+            if (initialUser) {
+              const userExists = api.isUserValid(initialUser.user_id);
+              if (!userExists) {
+                console.log('App: Session invalid');
+                localStorage.removeItem('solomon_session');
+                initialUser = null;
+              } else {
+                console.log('App: Session valid', initialUser);
+              }
             }
+          } catch (e) {
+            console.error('App: Session parse error', e);
+            localStorage.removeItem('solomon_session');
           }
-        } catch (e) {
-          localStorage.removeItem('solomon_session');
         }
+        
+        setCurrentUser(initialUser);
+        loadStateFromAPI();
+        setIsDBReady(true);
+        console.log('App: DB Ready');
+      } catch (error) {
+        console.error('App: Initialization failed', error);
+        setIsDBReady(true);
       }
-      
-      setCurrentUser(initialUser);
-      loadStateFromAPI();
-      setIsDBReady(true);
     };
     initApp();
   }, []);
@@ -340,6 +352,7 @@ const App: React.FC = () => {
     }
   };
 
+  console.log('App: Rendering...', { isDBReady, currentUser: !!currentUser });
   if (!isDBReady) {
     return (
       <div className="h-screen w-full flex flex-col items-center justify-center bg-slate-900 text-white">
