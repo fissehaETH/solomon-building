@@ -87,4 +87,15 @@ export function getEthiopianWeekday(isoString: string): string {
   return WEEKDAYS[date.getDay()];
 }
 
+// @ts-ignore
+import { toGregorian as ethToGregorian } from 'ethiopian-date';
+
+/**
+ * Converts an Ethiopian Date to a Gregorian Date object.
+ */
+export function toGregorianDate(year: number, month: number, day: number): Date {
+  const [gYear, gMonth, gDay] = ethToGregorian([year, month, day]);
+  return new Date(gYear, gMonth - 1, gDay);
+}
+
 export const AMHARIC_MONTHS = ETHIOPIAN_MONTHS;

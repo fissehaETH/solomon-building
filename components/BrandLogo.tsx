@@ -8,20 +8,17 @@ interface BrandLogoProps {
 }
 
 const BrandLogo: React.FC<BrandLogoProps> = ({ 
-  className = "", 
-  size = 200
+  className = ""
 }) => {
   return (
 
     <img 
       src="https://i.ibb.co/W4g8TfGn/Industrial-Aesthetic-Building-Materials-Logo-2.png"
       alt="Solomon Building Materials Logo"
-      width={size}
-      height={size}
-      className={`${className} h-auto object-contain rounded-2xl`}
-      style={{ maxWidth: size }}
+      className={`${className} w-full h-full object-contain rounded-2xl`}
       loading="lazy"
       referrerPolicy="no-referrer"
+      crossOrigin="anonymous"
     />
 
   );

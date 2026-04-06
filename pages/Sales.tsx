@@ -53,16 +53,18 @@ const SearchableProductDropdown = ({ products, selectedId, onSelect }: { product
   }, []);
 
   const selectedProduct = products.find(p => p.product_id === selectedId);
-  const filtered = products.filter(p => {
-    try {
-      const name = String(p?.product_name || '').toLowerCase();
-      const brand = String(p?.brand || '').toLowerCase();
-      const s = String(search || '').toLowerCase();
-      return name.includes(s) || brand.includes(s);
-    } catch (e) {
-      return false;
-    }
-  });
+  const filtered = useMemo(() => {
+    return products.filter(p => {
+      try {
+        const name = String(p?.product_name || '').toLowerCase();
+        const brand = String(p?.brand || '').toLowerCase();
+        const s = String(search || '').toLowerCase();
+        return name.includes(s) || brand.includes(s);
+      } catch (e) {
+        return false;
+      }
+    });
+  }, [products, search]);
 
   return (
     <div className="space-y-2 relative" ref={containerRef}>
@@ -124,16 +126,18 @@ const SearchableCustomerDropdown = ({ customers, selectedName, onSelect, onAddNe
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const filtered = (customers || []).filter(c => {
-    try {
-      const name = String(c?.customer_name || '').toLowerCase();
-      const phone = String(c?.phone || '').toLowerCase();
-      const s = String(search || '').toLowerCase();
-      return name.includes(s) || phone.includes(s);
-    } catch (e) {
-      return false;
-    }
-  });
+  const filtered = useMemo(() => {
+    return (customers || []).filter(c => {
+      try {
+        const name = String(c?.customer_name || '').toLowerCase();
+        const phone = String(c?.phone || '').toLowerCase();
+        const s = String(search || '').toLowerCase();
+        return name.includes(s) || phone.includes(s);
+      } catch (e) {
+        return false;
+      }
+    });
+  }, [customers, search]);
 
   return (
     <div className="space-y-2 relative" ref={containerRef}>
@@ -393,7 +397,6 @@ const Sales: React.FC<SalesProps> = ({ products, sales, categories, customers, o
         <motion.div variants={itemVariants} className="space-y-3">
           {sales.slice().reverse().slice(0, 15).map((sale, idx) => (
             <motion.div 
-              layout
               key={idx} 
               className="premium-card p-5 flex items-center justify-between"
             >
@@ -443,7 +446,7 @@ const Sales: React.FC<SalesProps> = ({ products, sales, categories, customers, o
                <div className="w-6" />
             </header>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-8 scroll-container">
+            <div className="flex-1 overflow-y-auto p-6 pb-80 space-y-8 scroll-container">
                {!showCartMobile ? (
                  <motion.div 
                    initial={{ opacity: 0, x: -20 }}

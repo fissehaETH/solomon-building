@@ -1,6 +1,12 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import Layout from './components/Layout';
+import ErrorBoundary from './components/ErrorBoundary';
+import { api } from './services/api';
+import { Product, Sale, Customer, User as UserType, Category, Purchase, Credit, CreditPayment } from './types';
+import { Loader2, RefreshCcw, Wifi, WifiOff } from 'lucide-react';
+import { Toaster } from 'sonner';
+
 import Dashboard from './pages/Dashboard';
 import Inventory from './pages/Inventory';
 import Sales from './pages/Sales';
@@ -9,9 +15,12 @@ import Customers from './pages/Customers';
 import Users from './pages/Users';
 import Credits from './pages/Credits';
 import Login from './pages/Login';
-import { api } from './services/api';
-import { Product, Sale, Customer, User as UserType, Category, Purchase, Credit, CreditPayment } from './types';
-import { Loader2, RefreshCcw, Wifi, WifiOff } from 'lucide-react';
+
+const PageLoader = () => (
+  <div className="flex items-center justify-center h-[60vh]">
+    <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
+  </div>
+);
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -98,7 +107,7 @@ const App: React.FC = () => {
         setCurrentUser(initialUser);
         loadStateFromAPI();
         setIsDBReady(true);
-        console.log('App: DB Ready');
+        console.log('App: DB Ready, currentUser:', initialUser?.username);
       } catch (error) {
         console.error('App: Initialization failed', error);
         setIsDBReady(true);
@@ -109,14 +118,16 @@ const App: React.FC = () => {
 
   const handleSync = async () => {
     if (isRefreshing) return;
+    console.log('App: Starting sync...');
     setIsRefreshing(true);
     try {
       const success = await api.syncWithRemote();
+      console.log('App: Sync finished, success:', success);
       if (success) {
         loadStateFromAPI();
       }
     } catch (err) {
-      console.error("Sync error:", err);
+      console.error("App: Sync error:", err);
     } finally {
       setIsRefreshing(false);
     }
@@ -189,6 +200,15 @@ const App: React.FC = () => {
       return;
     }
     await api.addCategory(category);
+    loadStateFromAPI();
+  };
+
+  const handleUpdateCategory = async (categoryId: string, category: Omit<Category, 'catagory_id'>) => {
+    if (currentUser && !api.isUserValid(currentUser.user_id)) {
+      handleLogout();
+      return;
+    }
+    await api.updateCategory(categoryId, category);
     loadStateFromAPI();
   };
 
@@ -283,7 +303,7 @@ const App: React.FC = () => {
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard':
-        return <Dashboard products={products} sales={sales} customers={customers} credits={credits} categories={categories} currentUser={currentUser} />;
+        return <Dashboard products={products} sales={sales} customers={customers} credits={credits} creditPayments={creditPayments} categories={categories} purchases={purchases} currentUser={currentUser} />;
       case 'inventory':
         return (
           // Fixed line 130: Added currentUser prop which is required by Inventory component
@@ -293,6 +313,7 @@ const App: React.FC = () => {
             onAddProduct={handleAddProduct} 
             onDeleteProduct={handleDeleteProduct}
             onAddCategory={handleAddCategory}
+            onUpdateCategory={handleUpdateCategory}
             onDeleteCategory={handleDeleteCategory}
             onAdjustStock={handleAdjustStock}
             currentUser={currentUser}
@@ -348,53 +369,69 @@ const App: React.FC = () => {
           />
         );
       default:
-        return <Dashboard products={products} sales={sales} customers={customers} credits={credits} categories={categories} currentUser={currentUser} />;
+        return <Dashboard products={products} sales={sales} customers={customers} credits={credits} creditPayments={creditPayments} categories={categories} purchases={purchases} currentUser={currentUser} />;
     }
   };
 
-  console.log('App: Rendering...', { isDBReady, currentUser: !!currentUser });
-  if (!isDBReady) {
-    return (
-      <div className="h-screen w-full flex flex-col items-center justify-center bg-slate-900 text-white">
-        <Loader2 className="w-12 h-12 animate-spin text-orange-500 mb-4" />
-        <p className="font-black uppercase tracking-widest text-xs animate-pulse">Initializing Database...</p>
-      </div>
-    );
-  }
-
-  if (!currentUser) {
-    return <Login onLoginSuccess={(user) => setCurrentUser(user)} />;
-  }
+  console.log('App: Rendering...', { isDBReady, currentUser: currentUser?.username, activeTab });
 
   return (
-    <Layout 
-      activeTab={activeTab} 
-      setActiveTab={setActiveTab} 
-      currentUser={currentUser}
-      onLogout={handleLogout}
-      lowStockItems={lowStockProducts}
-    >
-      <div className="flex items-center justify-end mb-6 -mt-2">
-         <div className="flex items-center gap-3 pl-4 pr-3 py-2 bg-white border border-slate-100 rounded-full shadow-sm">
-            {isOnline ? (
-              <Wifi className="w-3.5 h-3.5 text-emerald-500" />
-            ) : (
-              <WifiOff className="w-3.5 h-3.5 text-red-500" />
-            )}
-            <span className="text-[10px] font-black text-slate-500 uppercase tracking-tighter">
-              {isOnline ? (lastSynced ? `Synced: ${new Date(lastSynced).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}` : 'Ready to Sync') : 'Offline Storage Active'}
-            </span>
-            <button 
-              onClick={handleSync}
-              disabled={isRefreshing || !isOnline}
-              className={`p-1.5 hover:bg-slate-100 rounded-full transition-all active:scale-90 ${isRefreshing || !isOnline ? 'opacity-30 cursor-not-allowed' : ''}`}
-            >
-              <RefreshCcw className={`w-3.5 h-3.5 text-slate-400 ${isRefreshing ? 'animate-spin text-orange-500' : ''}`} />
-            </button>
-         </div>
-      </div>
-      {renderContent()}
-    </Layout>
+    <ErrorBoundary>
+      <Toaster position="top-right" richColors />
+      {(() => {
+        if (!isDBReady) {
+          console.log('App: Showing DB Init screen');
+          return (
+            <div className="h-screen w-full flex flex-col items-center justify-center bg-slate-900 text-white">
+              <Loader2 className="w-12 h-12 animate-spin text-orange-500 mb-4" />
+              <p className="font-black uppercase tracking-widest text-xs animate-pulse">Initializing Database...</p>
+            </div>
+          );
+        }
+
+        if (!currentUser) {
+          console.log('App: Showing Login screen');
+          return (
+            <Login onLoginSuccess={(user) => {
+              console.log('App: Login success callback triggered', user);
+              setCurrentUser(user);
+            }} />
+          );
+        }
+
+        console.log('App: Showing Main Layout');
+        return (
+          <Layout 
+            activeTab={activeTab} 
+            setActiveTab={setActiveTab} 
+            currentUser={currentUser}
+            onLogout={handleLogout}
+            lowStockItems={lowStockProducts}
+          >
+            <div className="flex items-center justify-end mb-6 -mt-2">
+               <div className="flex items-center gap-3 pl-4 pr-3 py-2 bg-white border border-slate-100 rounded-full shadow-sm">
+                  {isOnline ? (
+                    <Wifi className="w-3.5 h-3.5 text-emerald-500" />
+                  ) : (
+                    <WifiOff className="w-3.5 h-3.5 text-red-500" />
+                  )}
+                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-tighter">
+                    {isOnline ? (lastSynced ? `Synced: ${new Date(lastSynced).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}` : 'Ready to Sync') : 'Offline Storage Active'}
+                  </span>
+                  <button 
+                    onClick={handleSync}
+                    disabled={isRefreshing || !isOnline}
+                    className={`p-1.5 hover:bg-slate-100 rounded-full transition-all active:scale-90 ${isRefreshing || !isOnline ? 'opacity-30 cursor-not-allowed' : ''}`}
+                  >
+                    <RefreshCcw className={`w-3.5 h-3.5 text-slate-400 ${isRefreshing ? 'animate-spin text-orange-500' : ''}`} />
+                  </button>
+               </div>
+            </div>
+            {renderContent()}
+          </Layout>
+        );
+      })()}
+    </ErrorBoundary>
   );
 };
 

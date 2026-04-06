@@ -1,5 +1,5 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   TrendingUp, 
@@ -18,7 +18,8 @@ import {
   Calendar,
   ArrowUpRight,
   ArrowDownRight,
-  Download
+  Download,
+  FileText
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -34,9 +35,10 @@ import {
 } from 'recharts';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
+import { toast } from 'sonner';
 import { getBusinessInsights } from '../services/gemini';
-import { Product, Sale, Customer, User, Category, Credit } from '../types';
-import { formatEthiopian, getEthiopianWeekday, toEthiopianDate } from '../utils/dateUtils';
+import { Product, Sale, Customer, User, Category, Credit, CreditPayment, Purchase } from '../types';
+import { formatEthiopian, getEthiopianWeekday, toEthiopianDate, toGregorianDate, AMHARIC_MONTHS } from '../utils/dateUtils';
 import { api } from '../services/api';
 
 interface DashboardProps {
@@ -44,17 +46,54 @@ interface DashboardProps {
   sales: Sale[];
   customers: Customer[];
   credits: Credit[];
+  creditPayments: CreditPayment[];
   categories: Category[];
+  purchases: Purchase[];
   currentUser: User | null;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ products, sales, customers, credits, categories, currentUser }) => {
+const Dashboard: React.FC<DashboardProps> = ({ products, sales, customers, credits, creditPayments, categories, purchases, currentUser }) => {
   const [showLowStockModal, setShowLowStockModal] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isGeneratingInsights, setIsGeneratingInsights] = useState(false);
   const [aiInsights, setAiInsights] = useState<string | null>(null);
   const [timePeriod, setTimePeriod] = useState(7);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportStartDate, setExportStartDate] = useState(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+  const [exportEndDate, setExportEndDate] = useState(new Date().toISOString().split('T')[0]);
+  
+  // Ethiopian date state for export modal
+  const initialEthStart = toEthiopianDate(exportStartDate);
+  const initialEthEnd = toEthiopianDate(exportEndDate);
+  const [ethStart, setEthStart] = useState({ day: initialEthStart.day, month: initialEthStart.month, year: initialEthStart.year });
+  const [ethEnd, setEthEnd] = useState({ day: initialEthEnd.day, month: initialEthEnd.month, year: initialEthEnd.year });
+
+  useEffect(() => {
+    if (showExportModal) {
+      const start = toEthiopianDate(exportStartDate);
+      const end = toEthiopianDate(exportEndDate);
+      setEthStart({ day: start.day, month: start.month, year: start.year });
+      setEthEnd({ day: end.day, month: end.month, year: end.year });
+    }
+  }, [showExportModal]);
+
+  const updateEthDate = (type: 'start' | 'end', field: 'day' | 'month' | 'year', value: number) => {
+    if (type === 'start') {
+      let newEth = { ...ethStart, [field]: value };
+      if (newEth.month === 13 && newEth.day > 6) newEth.day = 6;
+      setEthStart(newEth);
+      const gDate = toGregorianDate(newEth.year, newEth.month, newEth.day);
+      setExportStartDate(gDate.toISOString().split('T')[0]);
+    } else {
+      let newEth = { ...ethEnd, [field]: value };
+      if (newEth.month === 13 && newEth.day > 6) newEth.day = 6;
+      setEthEnd(newEth);
+      const gDate = toGregorianDate(newEth.year, newEth.month, newEth.day);
+      setExportEndDate(gDate.toISOString().split('T')[0]);
+    }
+  };
   const dashboardRef = useRef<HTMLDivElement>(null);
+  const exportRef = useRef<HTMLDivElement>(null);
   
   const hasFinancialVisibility = currentUser?.role === 'Admin';
 
@@ -71,58 +110,168 @@ const Dashboard: React.FC<DashboardProps> = ({ products, sales, customers, credi
   };
 
   const handleExport = async () => {
-    if (!dashboardRef.current) return;
     setIsExporting(true);
+    const exportToast = toast.loading('Preparing report...');
+    let reportContainer: HTMLDivElement | null = null;
     
-    // Generate insights if not already present before exporting
-    if (!aiInsights) {
-      await generateInsights();
-    }
-
     try {
-      // Small delay to ensure insights are rendered
-      await new Promise(resolve => setTimeout(resolve, 500));
+      toast.message('Generating report data...', { id: exportToast });
       
-      const canvas = await html2canvas(dashboardRef.current, {
+      // Filter data for the report table
+      const start = new Date(exportStartDate);
+      const end = new Date(exportEndDate);
+      end.setHours(23, 59, 59, 999);
+
+      const periodSales = sales.filter(s => {
+        const d = new Date(s.date);
+        return d >= start && d <= end;
+      });
+
+      const periodPurchases = purchases.filter(p => {
+        const d = new Date(p.date);
+        return d >= start && d <= end;
+      });
+
+      const totalSalesAmount = periodSales.reduce((acc, s) => acc + (Number(s.quantity) * Number(s.unitPrice)), 0);
+      const totalPurchasesAmount = periodPurchases.reduce((acc, p) => acc + (Number(p.quantity) * Number(p.unitPrice)), 0);
+      
+      // Credit at the end of the period
+      const creditsAtEnd = credits.filter(c => new Date(c.created_at) <= end);
+      const paymentsAtEnd = creditPayments.filter(p => new Date(p.payment_date) <= end);
+      
+      const totalCreditAtEnd = creditsAtEnd.reduce((acc, c) => acc + Number(c.total_amount), 0) - 
+                               paymentsAtEnd.reduce((acc, p) => acc + Number(p.amount), 0);
+
+      // Create a temporary container for the report table
+      reportContainer = document.createElement('div');
+      reportContainer.style.position = 'fixed';
+      reportContainer.style.left = '-9999px';
+      reportContainer.style.top = '0';
+      reportContainer.style.width = '800px';
+      reportContainer.style.backgroundColor = '#FFFFFF';
+      reportContainer.style.padding = '60px';
+      reportContainer.style.fontFamily = "'Inter', sans-serif";
+      
+      reportContainer.innerHTML = `
+        <div style="margin-bottom: 40px; border-bottom: 2px solid #F1F5F9; padding-bottom: 30px; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <h1 style="margin: 0; font-size: 28px; font-weight: 900; color: #0F172A; letter-spacing: -0.02em;">Business Performance Report</h1>
+            <p style="margin: 8px 0 0 0; font-size: 14px; font-weight: 600; color: #64748B; text-transform: uppercase; letter-spacing: 0.1em;">
+              Period: ${formatEthiopian(exportStartDate)} - ${formatEthiopian(exportEndDate)}
+            </p>
+          </div>
+          <div style="text-align: right;">
+            <p style="margin: 0; font-size: 10px; font-weight: 800; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.1em;">Report Generated</p>
+            <p style="margin: 4px 0 0 0; font-size: 14px; font-weight: 700; color: #1E293B;">${formatEthiopian(new Date().toISOString())}</p>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 40px;">
+          <div style="padding: 24px; background-color: #ECFDF5; border: 1px solid #D1FAE5; border-radius: 20px;">
+            <p style="margin: 0 0 8px 0; font-size: 10px; font-weight: 800; color: #059669; text-transform: uppercase; letter-spacing: 0.1em;">Total Sales</p>
+            <p style="margin: 0; font-size: 24px; font-weight: 900; color: #064E3B;">${totalSalesAmount.toLocaleString()} <span style="font-size: 12px; font-weight: 700; opacity: 0.6;">ETB</span></p>
+          </div>
+          <div style="padding: 24px; background-color: #EFF6FF; border: 1px solid #DBEAFE; border-radius: 20px;">
+            <p style="margin: 0 0 8px 0; font-size: 10px; font-weight: 800; color: #2563EB; text-transform: uppercase; letter-spacing: 0.1em;">Total Purchases</p>
+            <p style="margin: 0; font-size: 24px; font-weight: 900; color: #1E3A8A;">${totalPurchasesAmount.toLocaleString()} <span style="font-size: 12px; font-weight: 700; opacity: 0.6;">ETB</span></p>
+          </div>
+          <div style="padding: 24px; background-color: #FEF2F2; border: 1px solid #FEE2E2; border-radius: 20px;">
+            <p style="margin: 0 0 8px 0; font-size: 10px; font-weight: 800; color: #DC2626; text-transform: uppercase; letter-spacing: 0.1em;">Closing Credit</p>
+            <p style="margin: 0; font-size: 24px; font-weight: 900; color: #7F1D1D;">${totalCreditAtEnd.toLocaleString()} <span style="font-size: 12px; font-weight: 700; opacity: 0.6;">ETB</span></p>
+          </div>
+        </div>
+
+        <div style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 24px; padding: 32px;">
+          <h2 style="margin: 0 0 24px 0; font-size: 18px; font-weight: 800; color: #0F172A;">Financial Summary</h2>
+          <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+              <tr>
+                <th style="text-align: left; padding-bottom: 16px; font-size: 11px; font-weight: 800; color: #64748B; text-transform: uppercase; letter-spacing: 0.1em; border-bottom: 1px solid #E2E8F0;">Metric Description</th>
+                <th style="text-align: right; padding-bottom: 16px; font-size: 11px; font-weight: 800; color: #64748B; text-transform: uppercase; letter-spacing: 0.1em; border-bottom: 1px solid #E2E8F0;">Amount (ETB)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td style="padding: 20px 0; font-size: 14px; font-weight: 600; color: #475569; border-bottom: 1px solid #F1F5F9;">Total Sales Revenue</td>
+                <td style="padding: 20px 0; font-size: 16px; font-weight: 800; color: #0F172A; text-align: right; border-bottom: 1px solid #F1F5F9;">${totalSalesAmount.toLocaleString()}</td>
+              </tr>
+              <tr>
+                <td style="padding: 20px 0; font-size: 14px; font-weight: 600; color: #475569; border-bottom: 1px solid #F1F5F9;">Total Inventory Purchases</td>
+                <td style="padding: 20px 0; font-size: 16px; font-weight: 800; color: #0F172A; text-align: right; border-bottom: 1px solid #F1F5F9;">${totalPurchasesAmount.toLocaleString()}</td>
+              </tr>
+              <tr>
+                <td style="padding: 20px 0; font-size: 14px; font-weight: 600; color: #475569; border-bottom: 1px solid #F1F5F9;">Outstanding Credit Balance</td>
+                <td style="padding: 20px 0; font-size: 16px; font-weight: 800; color: #0F172A; text-align: right; border-bottom: 1px solid #F1F5F9;">${totalCreditAtEnd.toLocaleString()}</td>
+              </tr>
+              <tr>
+                <td style="padding: 24px 0 0 0; font-size: 15px; font-weight: 800; color: #0F172A;">Net Cash Flow (Sales - Purchases)</td>
+                <td style="padding: 24px 0 0 0; font-size: 18px; font-weight: 900; color: #059669; text-align: right;">${(totalSalesAmount - totalPurchasesAmount).toLocaleString()}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div style="margin-top: 60px; text-align: center;">
+          <p style="margin: 0; font-size: 11px; font-weight: 600; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em;">Solomon Building Materials - Business Management System</p>
+        </div>
+      `;
+      
+      document.body.appendChild(reportContainer);
+
+      const canvas = await html2canvas(reportContainer, {
         scale: 2,
         useCORS: true,
         logging: false,
-        backgroundColor: '#F8FAFC',
-        windowWidth: 1200 // Ensure consistent width for PDF
+        backgroundColor: '#FFFFFF',
       });
+
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('p', 'mm', 'a4');
-      const imgProps = pdf.getImageProperties(imgData);
       const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
       
-      // Handle multi-page PDF if content is too long
-      let heightLeft = pdfHeight;
-      let position = 0;
-      const pageHeight = pdf.internal.pageSize.getHeight();
-
-      pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
-      heightLeft -= pageHeight;
-
-      while (heightLeft >= 0) {
-        position = heightLeft - pdfHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
-        heightLeft -= pageHeight;
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      
+      const fileName = `Report_${ethStart.year}_${ethStart.month}_${ethStart.day}.pdf`;
+      
+      // Enhanced download for mobile compatibility
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      if (isMobile) {
+        try {
+          const blob = pdf.output('blob');
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = fileName;
+          link.target = '_blank';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+        } catch (e) {
+          console.error('Mobile export fallback failed:', e);
+          pdf.save(fileName);
+        }
+      } else {
+        pdf.save(fileName);
       }
-
-      pdf.save(`Solomon_Report_${new Date().toISOString().split('T')[0]}.pdf`);
+      
+      toast.success('Report exported successfully!', { id: exportToast });
     } catch (error) {
       console.error('Export failed:', error);
+      toast.error('Export failed. Please try again.', { id: exportToast });
     } finally {
+      if (reportContainer && document.body.contains(reportContainer)) {
+        document.body.removeChild(reportContainer);
+      }
       setIsExporting(false);
     }
   };
   
-  const totalSalesValue = sales.reduce((acc, sale) => acc + (Number(sale.quantity) * Number(sale.unitPrice)), 0);
-  const totalInventoryValue = products.reduce((acc, p) => acc + (Number(p.stock_qty) * Number(p.unit_price)), 0);
+  const totalSalesValue = useMemo(() => sales.reduce((acc, sale) => acc + (Number(sale.quantity) * Number(sale.unitPrice)), 0), [sales]);
+  const totalInventoryValue = useMemo(() => products.reduce((acc, p) => acc + (Number(p.stock_qty) * Number(p.unit_price)), 0), [products]);
   
-  const totalCostValue = sales.reduce((acc, sale) => {
+  const totalCostValue = useMemo(() => sales.reduce((acc, sale) => {
     const product = products.find(p => p.product_id === sale.product_id);
     if (!product) return acc;
     
@@ -138,15 +287,15 @@ const Dashboard: React.FC<DashboardProps> = ({ products, sales, customers, credi
     
     const costPerBaseUnit = Number(product.unit_price) / factor;
     return acc + (Number(sale.base_quantity) * costPerBaseUnit);
-  }, 0);
+  }, 0), [sales, products, categories]);
 
-  const totalProfit = totalSalesValue - totalCostValue;
-  const totalCreditValue = credits.reduce((acc, c) => acc + Number(c.remaining_amount), 0);
+  const totalProfit = useMemo(() => totalSalesValue - totalCostValue, [totalSalesValue, totalCostValue]);
+  const totalCreditValue = useMemo(() => credits.reduce((acc, c) => acc + Number(c.remaining_amount), 0), [credits]);
   
-  const lowStockItems = products.filter(p => Number(p.stock_qty) <= Number(p.min_stock));
+  const lowStockItems = useMemo(() => products.filter(p => Number(p.stock_qty) <= Number(p.min_stock)), [products]);
   const lowStockCount = lowStockItems.length;
 
-  const chartData = Array.from({ length: timePeriod }).map((_, i) => {
+  const chartData = useMemo(() => Array.from({ length: timePeriod }).map((_, i) => {
     const d = new Date();
     d.setDate(d.getDate() - (timePeriod - 1 - i));
     const dateStr = d.toISOString().split('T')[0];
@@ -162,13 +311,12 @@ const Dashboard: React.FC<DashboardProps> = ({ products, sales, customers, credi
       name: timePeriod === 7 ? getEthiopianWeekday(d.toISOString()) : `${eth.monthName} ${eth.day}`,
       amount: dayTotal
     };
-  });
+  }), [timePeriod, sales]);
 
-  const last7DaysSales = chartData; // Keep for backward compatibility if needed, but we'll use chartData
-
-  const recentSales = sales
+  const recentSales = useMemo(() => sales
+    .slice()
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-    .slice(0, 5);
+    .slice(0, 5), [sales]);
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -207,16 +355,12 @@ const Dashboard: React.FC<DashboardProps> = ({ products, sales, customers, credi
         </div>
         <div className="flex items-center gap-3">
           <button 
-            onClick={handleExport}
+            onClick={() => setShowExportModal(true)}
             disabled={isExporting}
             className="px-6 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-sm hover:bg-slate-50 transition-all shadow-sm flex items-center gap-2 disabled:opacity-50"
           >
-            {isExporting ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Download className="w-4 h-4" />
-            )}
-            {isExporting ? 'Exporting...' : 'Export Report'}
+            <Download className="w-4 h-4" />
+            Export Report
           </button>
         </div>
       </motion.div>
@@ -406,36 +550,6 @@ const Dashboard: React.FC<DashboardProps> = ({ products, sales, customers, credi
         <motion.div variants={itemVariants} className="premium-card p-10">
           <div className="flex items-center justify-between mb-8">
             <div>
-              <h3 className="text-2xl font-black text-slate-900 tracking-tight">ትንታኔ</h3>
-            </div>
-            <button 
-              onClick={generateInsights}
-              disabled={isGeneratingInsights}
-              className="p-3 bg-orange-50 text-orange-600 rounded-xl hover:bg-orange-100 transition-all disabled:opacity-50"
-            >
-              {isGeneratingInsights ? <Loader2 className="w-5 h-5 animate-spin" /> : <RefreshCcw className="w-5 h-5" />}
-            </button>
-          </div>
-          
-          <div className="bg-slate-50 rounded-[2rem] p-8 min-h-[200px]">
-            {aiInsights ? (
-              <div className="prose prose-slate max-w-none">
-                <div className="text-slate-700 font-medium leading-relaxed whitespace-pre-wrap">
-                  {aiInsights}
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center h-full py-10 text-center">
-                <Database className="w-12 h-12 text-slate-200 mb-4" />
-                <p className="text-slate-400 font-bold text-sm">Click the refresh button to generate AI insights for your business.</p>
-              </div>
-            )}
-          </div>
-        </motion.div>
-
-        <motion.div variants={itemVariants} className="premium-card p-10">
-          <div className="flex items-center justify-between mb-8">
-            <div>
               <h3 className="text-2xl font-black text-slate-900 tracking-tight">Stocks Available</h3>
               <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Current Inventory Status</p>
             </div>
@@ -540,6 +654,158 @@ const Dashboard: React.FC<DashboardProps> = ({ products, sales, customers, credi
                   className="w-full py-5 bg-slate-900 text-white font-black uppercase tracking-[0.2em] rounded-2xl hover:bg-slate-800 transition-all shadow-xl shadow-slate-900/20"
                 >
                   Acknowledge
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {showExportModal && (
+          <div className="fixed inset-0 z-[100] flex items-end md:items-center justify-center p-0 md:p-6">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" 
+              onClick={() => setShowExportModal(false)}
+            />
+            <motion.div 
+              initial={{ opacity: 0, y: 100, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 100, scale: 0.95 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="bg-white w-full max-w-lg rounded-t-[3rem] md:rounded-[3rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] z-10"
+            >
+              <div className="p-10 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
+                <div className="flex items-center gap-5">
+                  <div className="bg-blue-100 p-4 rounded-[1.5rem] text-blue-600">
+                    <Download className="w-8 h-8" />
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-black text-slate-900 tracking-tight">Export Report</h3>
+                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-1">Select Report Period</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setShowExportModal(false)}
+                  className="p-3 bg-slate-50 text-slate-400 rounded-2xl hover:bg-slate-100 transition-colors"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+              
+              <div className="p-6 md:p-10 space-y-8 bg-slate-50/50 flex-1 overflow-y-auto">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="space-y-4">
+                    <label className="text-[11px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1 flex items-center gap-2">
+                      <Calendar className="w-3 h-3" />
+                      የመጀመሪያ ቀን (Start Date)
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      <select 
+                        value={ethStart.day}
+                        onChange={(e) => updateEthDate('start', 'day', Number(e.target.value))}
+                        className="p-3 bg-white border border-slate-200 rounded-2xl font-bold text-slate-900 focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all text-sm"
+                      >
+                        {Array.from({ length: ethStart.month === 13 ? 6 : 30 }, (_, i) => i + 1).map(d => (
+                          <option key={d} value={d}>{d}</option>
+                        ))}
+                      </select>
+                      <select 
+                        value={ethStart.month}
+                        onChange={(e) => updateEthDate('start', 'month', Number(e.target.value))}
+                        className="p-3 bg-white border border-slate-200 rounded-2xl font-bold text-slate-900 focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all text-sm"
+                      >
+                        {AMHARIC_MONTHS.map((m, i) => (
+                          <option key={i + 1} value={i + 1}>{m}</option>
+                        ))}
+                      </select>
+                      <select 
+                        value={ethStart.year}
+                        onChange={(e) => updateEthDate('start', 'year', Number(e.target.value))}
+                        className="p-3 bg-white border border-slate-200 rounded-2xl font-bold text-slate-900 focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all text-sm"
+                      >
+                        {Array.from({ length: 10 }, (_, i) => initialEthStart.year - 5 + i).map(y => (
+                          <option key={y} value={y}>{y}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <p className="text-[10px] font-bold text-slate-400 ml-1 italic">
+                      Gregorian: {new Date(exportStartDate).toLocaleDateString()}
+                    </p>
+                  </div>
+
+                  <div className="space-y-4">
+                    <label className="text-[11px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1 flex items-center gap-2">
+                      <Calendar className="w-3 h-3" />
+                      የመጨረሻ ቀን (End Date)
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      <select 
+                        value={ethEnd.day}
+                        onChange={(e) => updateEthDate('end', 'day', Number(e.target.value))}
+                        className="p-3 bg-white border border-slate-200 rounded-2xl font-bold text-slate-900 focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all text-sm"
+                      >
+                        {Array.from({ length: ethEnd.month === 13 ? 6 : 30 }, (_, i) => i + 1).map(d => (
+                          <option key={d} value={d}>{d}</option>
+                        ))}
+                      </select>
+                      <select 
+                        value={ethEnd.month}
+                        onChange={(e) => updateEthDate('end', 'month', Number(e.target.value))}
+                        className="p-3 bg-white border border-slate-200 rounded-2xl font-bold text-slate-900 focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all text-sm"
+                      >
+                        {AMHARIC_MONTHS.map((m, i) => (
+                          <option key={i + 1} value={i + 1}>{m}</option>
+                        ))}
+                      </select>
+                      <select 
+                        value={ethEnd.year}
+                        onChange={(e) => updateEthDate('end', 'year', Number(e.target.value))}
+                        className="p-3 bg-white border border-slate-200 rounded-2xl font-bold text-slate-900 focus:outline-none focus:ring-4 focus:ring-blue-500/10 transition-all text-sm"
+                      >
+                        {Array.from({ length: 10 }, (_, i) => initialEthEnd.year - 5 + i).map(y => (
+                          <option key={y} value={y}>{y}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <p className="text-[10px] font-bold text-slate-400 ml-1 italic">
+                      Gregorian: {new Date(exportEndDate).toLocaleDateString()}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-6 bg-blue-50/50 rounded-[1.5rem] border border-blue-100 flex gap-4">
+                  <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center shrink-0">
+                    <FileText className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <p className="text-xs font-bold text-blue-600/80 leading-relaxed">
+                    የመነጨው ፒዲኤፍ ለተመረጠው ጊዜ የጠቅላላ ሽያጮች፣ ጠቅላላ ግዢዎች እና የብድር ቀሪ ሒሳብ ማጠቃለያ ሰንጠረዥን ያካትታል።
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-6 md:p-10 bg-slate-50 border-t border-slate-100 flex gap-4 sticky bottom-0 z-10">
+                <button 
+                  onClick={() => setShowExportModal(false)}
+                  className="flex-1 px-8 py-4 bg-white border border-slate-200 text-slate-600 rounded-[1.5rem] font-bold text-sm hover:bg-slate-50 transition-all"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={() => {
+                    if (!exportStartDate || !exportEndDate) {
+                      toast.error('Please select both start and end dates');
+                      return;
+                    }
+                    setShowExportModal(false);
+                    handleExport();
+                  }}
+                  disabled={isExporting}
+                  className="flex-1 px-8 py-4 bg-orange-500 text-white rounded-[1.5rem] font-black uppercase tracking-widest text-xs hover:bg-orange-600 transition-all shadow-xl shadow-orange-500/20 flex items-center justify-center gap-2"
+                >
+                  {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                  {isExporting ? 'Generating...' : 'Export PDF'}
                 </button>
               </div>
             </motion.div>

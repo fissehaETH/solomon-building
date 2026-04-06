@@ -42,12 +42,12 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
   console.log('Login: Rendering...');
   return (
-    <div className="min-h-screen blueprint flex items-center justify-center p-0 sm:p-4 md:p-8 lg:p-12 overflow-y-auto selection:bg-orange-500/30">
+    <div className="h-screen w-full blueprint flex items-start sm:items-center justify-center p-0 sm:p-4 md:p-8 lg:p-12 overflow-y-auto selection:bg-orange-500/30">
       <motion.div 
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-        className="w-full max-w-7xl h-auto min-h-screen sm:min-h-[800px] bg-white sm:bg-slate-900/60 sm:backdrop-blur-3xl sm:rounded-[3rem] lg:rounded-[4rem] flex flex-col lg:flex-row shadow-[0_0_100px_rgba(249,115,22,0.15)] overflow-hidden border border-white/10 my-auto"
+        className="w-full max-w-7xl h-auto min-h-full sm:min-h-0 sm:h-full max-h-[1000px] bg-white sm:bg-slate-900/60 sm:backdrop-blur-3xl sm:rounded-[3rem] lg:rounded-[4rem] flex flex-col lg:flex-row shadow-[0_0_100px_rgba(249,115,22,0.15)] overflow-hidden border border-white/10 sm:my-auto"
       >
         
         {/* Brand Panel (Left Side on Desktop/Tablet Landscape) */}
@@ -59,8 +59,8 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                 transition={{ delay: 0.2, duration: 0.8 }}
                 className="flex items-center gap-6 mb-24"
               >
-                 <div className="p-4 bg-white rounded-[1.5rem] shadow-2xl shadow-orange-500/20 transform hover:rotate-6 transition-transform cursor-pointer">
-                   <BrandLogo size={180} />
+                 <div className="w-64 h-64 p-4 bg-white rounded-[1.5rem] shadow-2xl shadow-orange-500/20 transform hover:rotate-6 transition-transform cursor-pointer flex items-center justify-center">
+                   <BrandLogo />
                  </div>
                  <div className="text-white">
                     <h2 className="text-4xl font-black tracking-tighter leading-none uppercase">ሰሎሞን</h2>
@@ -123,16 +123,16 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         </div>
 
         {/* Login Panel (Right Side on Desktop, Full on Mobile) */}
-        <div className="flex-1 w-full lg:w-[600px] bg-white lg:m-6 lg:rounded-[2.5rem] xl:rounded-[3.5rem] flex flex-col justify-center p-8 sm:p-12 xl:p-24 relative overflow-hidden flex-shrink-0">
+        <div className="flex-1 w-full lg:w-[600px] bg-white lg:m-6 lg:rounded-[2.5rem] xl:rounded-[3.5rem] flex flex-col justify-start lg:justify-center p-8 sm:p-12 xl:p-24 relative overflow-y-auto lg:overflow-hidden flex-shrink-0 pb-80 sm:pb-12">
            
            {/* Mobile/Tablet Header */}
-           <div className="lg:hidden flex flex-col items-center mb-12 sm:mb-16">
+           <div className="lg:hidden flex flex-col items-center mb-8 sm:mb-16 mt-8 sm:mt-0">
               <motion.div 
                 initial={{ scale: 0.8, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
-                className="bg-white p-5 rounded-[2.5rem] shadow-2xl shadow-orange-500/10 mb-6 border border-slate-50"
+                className="bg-white w-32 h-32 p-4 rounded-[2.5rem] shadow-2xl shadow-orange-500/10 mb-6 border border-slate-50 flex items-center justify-center"
               >
-                <BrandLogo size={70} />
+                <BrandLogo />
               </motion.div>
               <motion.div
                 initial={{ y: 10, opacity: 0 }}

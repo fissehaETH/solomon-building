@@ -20,6 +20,15 @@
   --radius-2xl: 32px;
 }
 
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  position: fixed;
+  width: 100%;
+}
+
 body { 
   font-family: 'Plus Jakarta Sans', 'Noto Sans Ethiopic', sans-serif;
   -webkit-tap-highlight-color: transparent;
@@ -46,6 +55,12 @@ body {
 
 .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
 .safe-top { padding-top: env(safe-area-inset-top); }
+
+/* Mobile Viewport Height Fix */
+.h-screen {
+  height: 100vh;
+  height: calc(var(--vh, 1vh) * 100);
+}
 
 .glass {
   background: rgba(255, 255, 255, 0.85);

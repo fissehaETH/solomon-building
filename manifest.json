@@ -10,13 +10,13 @@
   "orientation": "portrait",
   "icons": [
     {
-      "src": "https://697b7ddfc4feaabd2d103ec8.imgix.net/solomon%20buildning%20materials%20logo.png?w=192&h=192&fit=crop",
+      "src": "https://picsum.photos/seed/solomon/192/192",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "https://697b7ddfc4feaabd2d103ec8.imgix.net/solomon%20buildning%20materials%20logo.png?w=512&h=512&fit=crop",
+      "src": "https://picsum.photos/seed/solomon/512/512",
       "sizes": "512x512",
       "type": "image/png"
     }

@@ -6,6 +6,9 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
+  define: {
+    'process.env': process.env
+  },
   plugins: [
     react(),
     tailwindcss(),
@@ -16,6 +19,18 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    sourcemap: true
+    sourcemap: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom'],
+          'vendor-firebase': ['firebase/app', 'firebase/firestore', 'firebase/auth'],
+          'vendor-charts': ['recharts'],
+          'vendor-ui': ['lucide-react', 'motion/react'],
+          'vendor-utils': ['html2canvas', 'jspdf', '@google/genai']
+        }
+      }
+    },
+    chunkSizeWarningLimit: 1000
   }
 });

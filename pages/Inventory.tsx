@@ -14,7 +14,8 @@ import {
   History, 
   AlertCircle,
   AlertTriangle,
-  Trash2
+  Trash2,
+  Edit
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Product, Category, User } from '../types';
@@ -25,6 +26,7 @@ interface InventoryProps {
   onAddProduct: (product: Omit<Product, 'product_id' | 'created_at'>) => Promise<void>;
   onDeleteProduct: (productId: string) => Promise<void>;
   onAddCategory: (category: Omit<Category, 'catagory_id'>) => Promise<void>;
+  onUpdateCategory: (categoryId: string, category: Omit<Category, 'catagory_id'>) => Promise<void>;
   onDeleteCategory: (categoryId: string) => Promise<void>;
   onAdjustStock: (productId: string, change: number, reason: string) => Promise<void>;
   currentUser: User | null;
@@ -154,6 +156,7 @@ const Inventory: React.FC<InventoryProps> = ({
   onAddProduct, 
   onDeleteProduct,
   onAddCategory, 
+  onUpdateCategory,
   onDeleteCategory,
   onAdjustStock, 
   currentUser 
@@ -162,6 +165,7 @@ const Inventory: React.FC<InventoryProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [adjustingProduct, setAdjustingProduct] = useState<Product | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -277,9 +281,11 @@ const Inventory: React.FC<InventoryProps> = ({
     }
   };
 
-  const filteredProducts = products.filter(p => {
-    return p.product_name.toLowerCase().includes(searchTerm.toLowerCase());
-  });
+  const filteredProducts = useMemo(() => {
+    return products.filter(p => {
+      return p.product_name.toLowerCase().includes(searchTerm.toLowerCase());
+    });
+  }, [products, searchTerm]);
 
   const [newCategory, setNewCategory] = useState({
     catagoryName: '',
@@ -328,12 +334,22 @@ const Inventory: React.FC<InventoryProps> = ({
     if (isSubmitting) return;
     setIsSubmitting(true);
     try {
-      await onAddCategory(newCategory);
-      setSuccessMessage(`Category Created: ${newCategory.catagoryName}`);
+      if (editingCategory) {
+        if (!editingCategory.catagory_id) {
+          throw new Error('Category ID is missing. Please try refreshing the page.');
+        }
+        await onUpdateCategory(editingCategory.catagory_id, newCategory);
+        setSuccessMessage(`Category Updated: ${newCategory.catagoryName}`);
+      } else {
+        await onAddCategory(newCategory);
+        setSuccessMessage(`Category Created: ${newCategory.catagoryName}`);
+      }
       setShowCategoryModal(false);
+      setEditingCategory(null);
       setNewCategory({ catagoryName: '', purchasingUnit: '', brand: '', sellingUnit: '', ConvertionRate: '' });
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      console.error('Category submit error:', err);
+      setError(err.message || 'Failed to save category');
     } finally {
       setIsSubmitting(false);
     }
@@ -450,7 +466,6 @@ const Inventory: React.FC<InventoryProps> = ({
                   const displayQty = p.stock_qty / ratio;
                   return (
                     <motion.tr 
-                      layout
                       key={p.product_id} 
                       className={`transition-colors group ${isLowStock ? 'bg-orange-50/60 hover:bg-orange-100/60' : 'hover:bg-slate-50'}`}
                     >
@@ -513,7 +528,7 @@ const Inventory: React.FC<InventoryProps> = ({
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {categories.filter(c => c.catagoryName.toLowerCase().includes(searchTerm.toLowerCase())).map(c => (
-                  <motion.tr layout key={c.catagory_id} className="hover:bg-slate-50 transition-colors">
+                  <motion.tr key={c.catagory_id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-8 py-5">
                       <p className="font-extrabold text-slate-800">{c.catagoryName}</p>
                     </td>
@@ -531,13 +546,32 @@ const Inventory: React.FC<InventoryProps> = ({
                     </td>
                     <td className="px-8 py-5 text-right">
                       {isAdmin && (
-                        <button 
-                          onClick={() => setCategoryToDelete(c.catagory_id)}
-                          disabled={isSubmitting}
-                          className="p-3 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 active:scale-95 transition-all disabled:opacity-50"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center justify-end gap-2">
+                          <button 
+                            onClick={() => {
+                              setEditingCategory(c);
+                              setNewCategory({
+                                catagoryName: c.catagoryName,
+                                purchasingUnit: c.purchasingUnit,
+                                brand: c.brand,
+                                sellingUnit: c.sellingUnit,
+                                ConvertionRate: c.ConvertionRate
+                              });
+                              setShowCategoryModal(true);
+                            }}
+                            className="p-3 bg-orange-50 text-orange-500 rounded-xl hover:bg-orange-100 active:scale-95 transition-all"
+                            title="Edit Category"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => setCategoryToDelete(c.catagory_id)}
+                            disabled={isSubmitting}
+                            className="p-3 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 active:scale-95 transition-all disabled:opacity-50"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       )}
                     </td>
                   </motion.tr>
@@ -562,7 +596,7 @@ const Inventory: React.FC<InventoryProps> = ({
               initial={{ opacity: 0, y: 100 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 100 }}
-              className="bg-white rounded-t-[2.5rem] md:rounded-[2.5rem] w-full max-w-lg relative h-[90vh] md:h-auto overflow-y-auto"
+              className="bg-white rounded-t-[2.5rem] md:rounded-[2.5rem] w-full max-w-lg relative h-[90vh] md:h-auto overflow-y-auto pb-80"
             >
               <div className="sticky top-0 bg-white/80 backdrop-blur-md p-8 border-b border-slate-50 flex items-center justify-between z-10">
                  <h3 className="text-2xl font-black text-slate-900">New Material</h3>
@@ -623,11 +657,15 @@ const Inventory: React.FC<InventoryProps> = ({
               initial={{ opacity: 0, y: 100 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 100 }}
-              className="bg-white rounded-t-[2.5rem] md:rounded-[2.5rem] w-full max-w-lg relative h-[90vh] md:h-auto overflow-y-auto"
+              className="bg-white rounded-t-[2.5rem] md:rounded-[2.5rem] w-full max-w-lg relative h-[90vh] md:h-auto overflow-y-auto pb-80"
             >
               <div className="sticky top-0 bg-white/80 backdrop-blur-md p-8 border-b border-slate-50 flex items-center justify-between z-10">
-                 <h3 className="text-2xl font-black text-slate-900">New Category</h3>
-                 <button onClick={() => setShowCategoryModal(false)} className="p-2 bg-slate-50 text-slate-400 rounded-xl"><X className="w-6 h-6" /></button>
+                 <h3 className="text-2xl font-black text-slate-900">{editingCategory ? 'Edit Category' : 'New Category'}</h3>
+                 <button onClick={() => {
+                   setShowCategoryModal(false);
+                   setEditingCategory(null);
+                   setNewCategory({ catagoryName: '', purchasingUnit: '', brand: '', sellingUnit: '', ConvertionRate: '' });
+                 }} className="p-2 bg-slate-50 text-slate-400 rounded-xl"><X className="w-6 h-6" /></button>
               </div>
               <form onSubmit={handleCategorySubmit} className="p-8 space-y-6">
                 <div className="space-y-4">
@@ -654,7 +692,7 @@ const Inventory: React.FC<InventoryProps> = ({
                   </div>
                 </div>
                 <button type="submit" disabled={isSubmitting} className="m3-button w-full py-5 bg-slate-900 text-white font-black uppercase rounded-2xl shadow-xl">
-                  {isSubmitting ? <Loader2 className="animate-spin mx-auto" /> : 'Register Category'}
+                  {isSubmitting ? <Loader2 className="animate-spin mx-auto" /> : (editingCategory ? 'Update Category' : 'Register Category')}
                 </button>
               </form>
             </motion.div>

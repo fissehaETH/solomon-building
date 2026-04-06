@@ -1,7 +1,7 @@
 
 import { Product, Sale, Customer, User, Category, Purchase, Credit, CreditPayment } from '../types';
 // import pkg from '../package.json';
-import { db } from './firebase';
+import { db, handleFirestoreError, OperationType } from './firebase';
 import { 
   collection, 
   getDocs, 
@@ -12,7 +12,8 @@ import {
   where, 
   updateDoc,
   increment,
-  deleteDoc
+  deleteDoc,
+  getDoc
 } from 'firebase/firestore';
 
 const APP_VERSION = '1.5.0';
@@ -36,8 +37,17 @@ class SolomonDB {
   }
 
   private async enqueue<T>(task: () => Promise<T>): Promise<T> {
-    const result = this.queue.then(task);
-    this.queue = result.catch(() => {});
+    const taskId = Math.random().toString(36).substring(7);
+    console.log(`SolomonDB: [${taskId}] Enqueuing task...`);
+    const result = this.queue.then(async () => {
+      console.log(`SolomonDB: [${taskId}] Starting task...`);
+      const res = await task();
+      console.log(`SolomonDB: [${taskId}] Task finished`);
+      return res;
+    });
+    this.queue = result.catch((err) => {
+      console.error(`SolomonDB: [${taskId}] Task failed`, err);
+    });
     return result;
   }
 
@@ -95,10 +105,13 @@ class SolomonDB {
   // --- PUBLIC API ---
 
   public async initialize(): Promise<void> {
+    console.log('SolomonDB: Initializing...');
     return this.enqueue(async () => {
       let data = await this.getFromDB('current_state');
+      console.log('SolomonDB: Data from DB:', !!data);
       
       if (!data) {
+        console.log('SolomonDB: No data found, seeding...');
         const defaultPass = await this.hashString('admin123');
         data = {
           products: [],
@@ -162,10 +175,13 @@ class SolomonDB {
           lastUpdated: new Date().toISOString()
         };
         await this.saveToDB('current_state', data);
+        console.log('SolomonDB: Seeded data saved');
       }
       this.cache = data;
+      console.log('SolomonDB: Cache initialized');
       
       if (navigator.onLine) {
+        console.log('SolomonDB: Online, starting background sync...');
         this.syncWithRemote().catch(console.error);
       }
     });
@@ -215,12 +231,36 @@ class SolomonDB {
 
     try {
       const collections = ['products', 'sales', 'customers', 'users', 'categories', 'purchases', 'credits', 'credit_payments'];
-      const remoteData: any = {};
+      const remoteData: Record<string, any[]> = {};
 
-      for (const colName of collections) {
-        const snapshot = await getDocs(collection(db, colName));
-        remoteData[colName] = snapshot.docs.map(doc => this.normalizeData(doc.data()));
-      }
+      // Fetch all collections in parallel
+      const fetchPromises = collections.map(async (colName) => {
+        try {
+          const snapshot = await getDocs(collection(db!, colName));
+          return {
+            colName,
+            docs: snapshot.docs.map(doc => {
+              const data = this.normalizeData(doc.data());
+              // Ensure ID is present for key collections
+              if (colName === 'categories' && !data.catagory_id) data.catagory_id = doc.id;
+              if (colName === 'products' && !data.product_id) data.product_id = doc.id;
+              if (colName === 'customers' && !data.customer_id) data.customer_id = doc.id;
+              if (colName === 'users' && !data.user_id) data.user_id = doc.id;
+              if (colName === 'credits' && !data.id) data.id = doc.id;
+              if (colName === 'credit_payments' && !data.id) data.id = doc.id;
+              return data;
+            })
+          };
+        } catch (error) {
+          handleFirestoreError(error, OperationType.GET, colName);
+          return { colName, docs: [] };
+        }
+      });
+
+      const results = await Promise.all(fetchPromises);
+      results.forEach(result => {
+        remoteData[result.colName] = result.docs;
+      });
 
       const isFirstSync = !this.cache.lastSynced;
 
@@ -239,14 +279,7 @@ class SolomonDB {
         }
       };
 
-      syncCollection('products');
-      syncCollection('sales');
-      syncCollection('customers');
-      syncCollection('users');
-      syncCollection('categories');
-      syncCollection('purchases');
-      syncCollection('credits');
-      syncCollection('credit_payments');
+      collections.forEach(syncCollection);
 
       this.cache.lastSynced = new Date().toISOString();
       await this.persistCache();
@@ -278,17 +311,85 @@ class SolomonDB {
       await this.persistCache();
       
       if (db) {
-        await setDoc(doc(db, 'categories', newCategory.catagory_id), newCategory);
+        try {
+          await setDoc(doc(db, 'categories', newCategory.catagory_id), newCategory);
+        } catch (error) {
+          handleFirestoreError(error, OperationType.WRITE, `categories/${newCategory.catagory_id}`);
+        }
+      }
+    });
+  }
+
+  async updateCategory(categoryId: string, category: Omit<Category, 'catagory_id'>): Promise<void> {
+    const id = String(categoryId || '').trim();
+    if (!id) {
+      console.error('Invalid categoryId passed to updateCategory:', categoryId);
+      throw new Error('Invalid Category ID');
+    }
+    return this.enqueue(async () => {
+      await this.ensureInitialized();
+      const index = this.cache.categories.findIndex((c: any) => String(c.catagory_id || '').trim() === id);
+      if (index === -1) {
+        console.error(`Category with ID ${id} not found in cache. Available IDs:`, this.cache.categories.map((c: any) => c.catagory_id));
+        throw new Error(`Category with ID ${id} not found`);
+      }
+
+      const oldCategory = this.cache.categories[index];
+      const updatedCategory: Category = { ...category, catagory_id: id };
+      
+      // If category name changed, update all products using this category
+      if (oldCategory.catagoryName !== updatedCategory.catagoryName) {
+        const productsToUpdate: any[] = [];
+        
+        this.cache.products = this.cache.products.map((p: any) => {
+          if (p.category === oldCategory.catagoryName) {
+            const updatedProduct = { ...p, category: updatedCategory.catagoryName };
+            productsToUpdate.push(updatedProduct);
+            return updatedProduct;
+          }
+          return p;
+        });
+
+        const firestore = db;
+        if (firestore && productsToUpdate.length > 0) {
+          const batch = writeBatch(firestore);
+          productsToUpdate.forEach((p: any) => {
+            if (p.product_id) {
+              batch.update(doc(firestore, 'products', String(p.product_id)), { category: updatedCategory.catagoryName });
+            }
+          });
+          try {
+            await batch.commit();
+          } catch (error) {
+            handleFirestoreError(error, OperationType.WRITE, 'products/category-update-batch');
+          }
+        }
+      }
+
+      this.cache.categories[index] = updatedCategory;
+      await this.persistCache();
+      
+      if (db) {
+        try {
+          await setDoc(doc(db, 'categories', id), updatedCategory);
+        } catch (error) {
+          handleFirestoreError(error, OperationType.WRITE, `categories/${id}`);
+        }
       }
     });
   }
 
   async deleteCategory(categoryId: string): Promise<void> {
+    const id = String(categoryId || '').trim();
+    if (!id) {
+      console.error('Invalid categoryId passed to deleteCategory:', categoryId);
+      throw new Error('Invalid Category ID');
+    }
     return this.enqueue(async () => {
       await this.ensureInitialized();
       
       // Check if any products are using this category
-      const category = this.cache.categories.find((c: any) => c.catagory_id === categoryId);
+      const category = this.cache.categories.find((c: any) => String(c.catagory_id || '').trim() === id);
       if (!category) return;
 
       const productsUsingCategory = this.cache.products.filter((p: any) => p.category === category.catagoryName);
@@ -296,11 +397,15 @@ class SolomonDB {
         throw new Error(`Cannot delete category "${category.catagoryName}" because it is being used by ${productsUsingCategory.length} products.`);
       }
 
-      this.cache.categories = (this.cache.categories || []).filter((c: any) => c.catagory_id !== categoryId);
+      this.cache.categories = (this.cache.categories || []).filter((c: any) => String(c.catagory_id || '').trim() !== id);
       await this.persistCache();
 
       if (db) {
-        await deleteDoc(doc(db, 'categories', categoryId));
+        try {
+          await deleteDoc(doc(db, 'categories', id));
+        } catch (error) {
+          handleFirestoreError(error, OperationType.DELETE, `categories/${id}`);
+        }
       }
     });
   }
@@ -318,12 +423,20 @@ class SolomonDB {
       await this.persistCache();
       
       if (db) {
-        await setDoc(doc(db, 'products', newProduct.product_id), newProduct);
+        try {
+          await setDoc(doc(db, 'products', newProduct.product_id), newProduct);
+        } catch (error) {
+          handleFirestoreError(error, OperationType.WRITE, `products/${newProduct.product_id}`);
+        }
       }
     });
   }
 
   async deleteProduct(productId: string): Promise<void> {
+    if (!productId || typeof productId !== 'string') {
+      console.error('Invalid productId:', productId);
+      throw new Error('Invalid Product ID');
+    }
     return this.enqueue(async () => {
       await this.ensureInitialized();
       
@@ -339,7 +452,11 @@ class SolomonDB {
       await this.persistCache();
 
       if (db) {
-        await deleteDoc(doc(db, 'products', productId));
+        try {
+          await deleteDoc(doc(db, 'products', productId));
+        } catch (error) {
+          handleFirestoreError(error, OperationType.DELETE, `products/${productId}`);
+        }
       }
     });
   }
@@ -357,7 +474,11 @@ class SolomonDB {
       await this.persistCache();
       
       if (db) {
-        await setDoc(doc(db, 'customers', newCustomer.customer_id), newCustomer);
+        try {
+          await setDoc(doc(db, 'customers', newCustomer.customer_id), newCustomer);
+        } catch (error) {
+          handleFirestoreError(error, OperationType.WRITE, `customers/${newCustomer.customer_id}`);
+        }
       }
     });
   }
@@ -398,7 +519,13 @@ class SolomonDB {
             created_at: date
           };
           this.cache.customers.push(newCustomer);
-          if (db) await setDoc(doc(db, 'customers', customerId), newCustomer);
+          if (db) {
+            try {
+              await setDoc(doc(db, 'customers', customerId), newCustomer);
+            } catch (error) {
+              handleFirestoreError(error, OperationType.WRITE, `customers/${customerId}`);
+            }
+          }
         }
 
         const totalAmount = newSales.reduce((sum, item) => sum + (Number(item.quantity) * Number(item.unitPrice)), 0);
@@ -442,7 +569,11 @@ class SolomonDB {
           batch.set(doc(firestore, 'credits', creditRecord.id), creditRecord);
         }
         
-        await batch.commit();
+        try {
+          await batch.commit();
+        } catch (error) {
+          handleFirestoreError(error, OperationType.WRITE, 'sales/batch');
+        }
       } else {
         // Handle local-only update if db is missing
         newSales.forEach(item => {
@@ -465,25 +596,29 @@ class SolomonDB {
       
       this.cache.purchases.push(...newPurchases);
       
-      if (db) {
-        const firestore = db;
-        const batch = writeBatch(firestore);
-        
-        newPurchases.forEach(item => {
-          const p = this.cache.products.find((x: any) => x.product_id === item.product_id);
-          if (p) {
-            p.stock_qty = Number(p.stock_qty) + Number(item.base_quantity);
-            p.unit_price = Number(item.unitPrice);
-            batch.update(doc(firestore, 'products', p.product_id), {
-              stock_qty: increment(Number(item.base_quantity)),
-              unit_price: Number(item.unitPrice)
-            });
+        if (db) {
+          const firestore = db;
+          const batch = writeBatch(firestore);
+          
+          newPurchases.forEach(item => {
+            const p = this.cache.products.find((x: any) => x.product_id === item.product_id);
+            if (p) {
+              p.stock_qty = Number(p.stock_qty) + Number(item.base_quantity);
+              p.unit_price = Number(item.unitPrice);
+              batch.update(doc(firestore, 'products', p.product_id), {
+                stock_qty: increment(Number(item.base_quantity)),
+                unit_price: Number(item.unitPrice)
+              });
+            }
+            batch.set(doc(collection(firestore, 'purchases')), item);
+          });
+          
+          try {
+            await batch.commit();
+          } catch (error) {
+            handleFirestoreError(error, OperationType.WRITE, 'purchases/batch');
           }
-          batch.set(doc(collection(firestore, 'purchases')), item);
-        });
-        
-        await batch.commit();
-      } else {
+        } else {
         // Handle local-only update
         newPurchases.forEach(item => {
           const p = this.cache.products.find((x: any) => x.product_id === item.product_id);
@@ -510,15 +645,19 @@ class SolomonDB {
         await this.persistCache();
         
         if (db) {
-          await updateDoc(doc(db, 'products', productId), {
-            stock_qty: increment(change)
-          });
-          await setDoc(doc(collection(db, 'adjustments')), {
-            productId,
-            change,
-            reason,
-            date: new Date().toISOString()
-          });
+          try {
+            await updateDoc(doc(db, 'products', productId), {
+              stock_qty: increment(change)
+            });
+            await setDoc(doc(collection(db, 'adjustments')), {
+              productId,
+              change,
+              reason,
+              date: new Date().toISOString()
+            });
+          } catch (error) {
+            handleFirestoreError(error, OperationType.WRITE, `products/${productId}/adjustment`);
+          }
         }
       }
     });
@@ -743,7 +882,11 @@ class SolomonDB {
       await this.persistCache();
       
       if (db) {
-        await setDoc(doc(db, 'users', newUser.user_id), newUser);
+        try {
+          await setDoc(doc(db, 'users', newUser.user_id), newUser);
+        } catch (error) {
+          handleFirestoreError(error, OperationType.WRITE, `users/${newUser.user_id}`);
+        }
       }
     });
   }
@@ -759,7 +902,11 @@ class SolomonDB {
       await this.persistCache();
 
       if (db) {
-        await deleteDoc(doc(db, 'users', userId));
+        try {
+          await deleteDoc(doc(db, 'users', userId));
+        } catch (error) {
+          handleFirestoreError(error, OperationType.DELETE, `users/${userId}`);
+        }
       }
     });
   }
@@ -780,7 +927,11 @@ class SolomonDB {
       await this.persistCache();
       
       if (db) {
-        await setDoc(doc(db, 'credits', newCredit.id), newCredit);
+        try {
+          await setDoc(doc(db, 'credits', newCredit.id), newCredit);
+        } catch (error) {
+          handleFirestoreError(error, OperationType.WRITE, `credits/${newCredit.id}`);
+        }
       }
     });
   }

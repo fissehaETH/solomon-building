@@ -96,7 +96,7 @@ const Layout: React.FC<LayoutProps> = ({
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -20, scale: 0.95 }}
       transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-      className="fixed md:absolute right-0 md:right-10 top-0 md:top-20 w-full md:w-96
+      className="fixed md:absolute right-0 md:right-10 top-[72px] md:top-20 w-full md:w-96
       bg-white md:rounded-[2.5rem] shadow-2xl z-[100]
       border-b md:border border-slate-100
       flex flex-col max-h-[80vh] md:max-h-[600px]
@@ -162,9 +162,9 @@ const Layout: React.FC<LayoutProps> = ({
         <div className="p-10 flex items-center gap-5">
           <motion.div 
             whileHover={{ rotate: 5, scale: 1.05 }}
-            className="bg-white p-3 rounded-[1.25rem] shadow-lg shadow-orange-500/20"
+            className="bg-white w-20 h-20 p-2 rounded-[1.25rem] shadow-lg shadow-orange-500/20 shrink-0"
           >
-            <BrandLogo size={32} />
+            <BrandLogo />
           </motion.div>
           <div>
             <h1 className="font-black text-2xl tracking-tighter leading-none">Solomon</h1>
@@ -238,6 +238,7 @@ const Layout: React.FC<LayoutProps> = ({
           </div>
           <button 
             onClick={() => setShowNotifications(!showNotifications)}
+            onMouseDown={(e) => e.stopPropagation()}
             className={`p-2.5 -mr-2 text-slate-600 active:bg-slate-100 rounded-2xl relative transition-all ${showNotifications ? 'bg-orange-50 text-orange-600' : ''}`}
           >
             <Bell className="w-6 h-6" />
@@ -265,12 +266,12 @@ const Layout: React.FC<LayoutProps> = ({
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
               className="absolute left-0 top-0 bottom-0 w-[85%] max-w-sm bg-white shadow-2xl flex flex-col"
             >
-              <div className="p-10 border-b border-slate-50 bg-slate-50/30 flex flex-col items-center gap-5">
+              <div className="p-10 border-b border-slate-50 bg-slate-50/30 flex flex-col items-center gap-3">
                 <motion.div 
                   whileHover={{ scale: 1.05 }}
-                  className="bg-white p-6 rounded-[2rem] shadow-2xl shadow-orange-500/10"
+                  className="bg-white w-32 h-32 p-4 rounded-[2rem] shadow-2xl shadow-orange-500/10"
                 >
-                  <BrandLogo size={60} />
+                  <BrandLogo />
                 </motion.div>
                 <div className="text-center">
                   <h1 className="font-black text-2xl text-slate-900 tracking-tighter">Solomon</h1>
@@ -328,6 +329,10 @@ const Layout: React.FC<LayoutProps> = ({
         )}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {showNotifications && <NotificationPanel />}
+      </AnimatePresence>
+
       <main className="flex-1 flex flex-col relative overflow-hidden min-h-0">
         <header className="hidden md:flex h-24 bg-white/80 backdrop-blur-xl border-b border-slate-100 items-center justify-between px-12 shrink-0">
           <div>
@@ -347,6 +352,7 @@ const Layout: React.FC<LayoutProps> = ({
             </div>
             <button 
               onClick={() => setShowNotifications(!showNotifications)} 
+              onMouseDown={(e) => e.stopPropagation()}
               className={`p-3 rounded-2xl text-slate-500 hover:bg-slate-100 transition-all relative ${showNotifications ? 'bg-orange-50 text-orange-600' : 'bg-slate-50'}`}
             >
               <Bell className="w-5 h-5" />
@@ -358,11 +364,8 @@ const Layout: React.FC<LayoutProps> = ({
               <Settings className="w-5 h-5" />
             </button>
           </div>
-          <AnimatePresence>
-            {showNotifications && <NotificationPanel />}
-          </AnimatePresence>
         </header>
-
+        
         <AnimatePresence mode="wait">
           <motion.div 
             key={activeTab}
@@ -370,7 +373,7 @@ const Layout: React.FC<LayoutProps> = ({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.3, ease: [0.2, 0, 0, 1] }}
-            className="flex-1 overflow-y-auto p-6 md:p-12 scroll-container custom-scrollbar pb-32 md:pb-12 min-h-0"
+            className="flex-1 overflow-y-auto p-6 md:p-12 scroll-container custom-scrollbar pb-80 md:pb-12 min-h-0"
           >
             <div className="max-w-7xl mx-auto">
               {children}

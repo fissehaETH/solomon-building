@@ -2,7 +2,18 @@
 import { GoogleGenAI } from "@google/genai";
 import { Product, Sale } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+let aiClient: GoogleGenAI | null = null;
+
+function getAIClient(): GoogleGenAI {
+  if (!aiClient) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error("GEMINI_API_KEY is not set in the environment. Please ensure the Gemini API is enabled and the key is available.");
+    }
+    aiClient = new GoogleGenAI({ apiKey });
+  }
+  return aiClient;
+}
 
 export async function getBusinessInsights(products: Product[], sales: Sale[]) {
   const prompt = `
@@ -25,6 +36,7 @@ export async function getBusinessInsights(products: Product[], sales: Sale[]) {
   `;
 
   try {
+    const ai = getAIClient();
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: prompt,
